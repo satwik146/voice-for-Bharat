@@ -1,0 +1,45 @@
+# =============================================================================
+# 10 Days of Voice Agents — #VoiceForBharat Challenge 2026 (.gitignore)
+# =============================================================================
+
+# Ignore Secret API Keys across all Day subfolders
+*.env
+.env
+.env.local
+.env.*.local
+day-*/backend/.env.local
+day-*/frontend/.env.local
+**/backend/.env.local
+**/frontend/.env.local
+
+# Allow example environment templates
+!.env.example
+!**/backend/.env.example
+!**/frontend/.env.example
+
+# Markdown Draft Notes (Keep only README.md)
+*.md
+!README.md
+!**/README.md
+
+# Ignore Dependencies & Environments across all subfolders
+node_modules/
+**/node_modules/
+.venv/
+**/backend/.venv/
+__pycache__/
+**/__pycache__/
+*.pyc
+
+# Build outputs
+.next/
+**/.next/
+out/
+build/
+dist/
+
+# Logs & Temporary OS / IDE files
+*.log
+.DS_Store
+.vscode/
+.idea/

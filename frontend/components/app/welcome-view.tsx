@@ -40,7 +40,7 @@ export const WelcomeView = ({
         <Button
           size="lg"
           onClick={onStartCall}
-          className="mt-6 w-72 h-12 rounded-full font-sans text-sm font-bold tracking-wide uppercase bg-purple-600 hover:bg-purple-700 active:scale-95 text-white shadow-xl hover:shadow-purple-500/40 transition-all cursor-pointer border border-purple-400/30 flex items-center justify-center gap-2"
+          className="mt-6 w-64 rounded-full font-mono text-xs font-bold tracking-wider uppercase"
         >
           {startButtonText}
         </Button>

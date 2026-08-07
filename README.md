@@ -1,52 +1,53 @@
-# 🇮🇳 10 Days of Voice Agents — #VoiceForBharat Challenge 2026
+# 📚 Vidya Vani (विद्या वाणी) — Voice AI Tutor for Bharat
 
-Welcome to my submission repository for the **10 Days of Voice Agents (#VoiceForBharat Edition)**, powered by **Murf Falcon TTS**!
-
----
-
-## 📌 Track Choice
-- **Selected Track:** 📚 **Learning & Literacy**
-- **Project Name:** **Vidya Vani (विद्या वाणी)** — Voice AI Tutor for Bharat Learners
-- **Selected Voice:** `Pooja` (Indian English / Hindi - Expressive style)
+**10 Days of Voice Agents — #VoiceForBharat Challenge 2026**  
+**Track:** 📚 **Learning & Literacy**  
+**TTS Engine:** Powered by **Murf Falcon 2** (Fastest Production Speech Synthesis API)  
+**Selected Voice:** `Pooja` (Indian English / Hindi - Expressive & Conversational style)  
 
 ---
 
-## 📅 Daily Progress Log
+## 📅 Challenge Progress & Day 2 Implementation Summary
 
-| Day | Task | Status | Folder / Code Link |
+| Day | Feature Milestone | Status | Key Deliverables |
 | :---: | :--- | :---: | :--- |
-| **Day 1** | Get Your Voice Agent Talking (Setup, Track, Murf Falcon TTS & Latency Logging) | ✅ Complete | [day-1](./day-1) |
-| **Day 2** | *Coming Soon* | ⏳ Pending | `day-2` |
-| **Day 3** | *Coming Soon* | ⏳ Pending | `day-3` |
-| **Day 4** | *Coming Soon* | ⏳ Pending | `day-4` |
-| **Day 5** | *Coming Soon* | ⏳ Pending | `day-5` |
-| **Day 6** | *Coming Soon* | ⏳ Pending | `day-6` |
-| **Day 7** | *Coming Soon* | ⏳ Pending | `day-7` |
-| **Day 8** | *Coming Soon* | ⏳ Pending | `day-8` |
-| **Day 9** | *Coming Soon* | ⏳ Pending | `day-9` |
-| **Day 10** | *Final Project Polish & Submission* | ⏳ Pending | `day-10` |
+| **Day 1** | **Get Your Voice Agent Talking** | ✅ Done | Murf Falcon TTS (`Pooja`), ~304ms Time-To-First-Audio, LiveKit WebRTC pipeline, Latency logger. |
+| **Day 2** | **Personality, Call Objectives & Guardrails** | ✅ Done | Defined 3 Call Objectives, Hard Refusals, Never-Claims (No shaming, no medical/disability diagnosis), Escalation Script, Code-Mixed Hinglish support. |
 
 ---
 
-## ⚡ Day 1 Highlights & Performance
+## 🎯 Day 2 Breakdown: Personality & Guardrails
 
-- **Agent Name:** Vidya Vani (विद्या वाणी)
-- **Time-To-First-Audio (TTFA):** **304.31 ms** (Powered by Murf Falcon TTS)
-- **Voice Justification:** Murf's *Pooja* (Expressive Indian English) provides a warm, enthusiastic, and patient tone essential for engaging students and adult learners.
+### 1. Call Objectives
+1. **First-Turn Greeting & Goal Identification**: Welcome the learner and identify their goal (Vocabulary, Math, Grammar, or Storytelling).
+2. **Interactive Code-Mixed Practice**: Teach using clear explanations, mirroring the learner's language mix (English, Hindi, Hinglish).
+3. **Encouraging Feedback Loop**: Praise correct answers; guide wrong answers with gentle hints without raw spoilers.
+
+### 2. Guardrails & Refusals
+- **Hard Refusal**: Refuses inappropriate or non-educational topics (*"I am Vidya Vani, your learning tutor! Let us get back to our lesson."*).
+- **Never-Claims**:
+  - Never shames or scolds for wrong answers.
+  - Never diagnoses a child/learner with a learning disability or deficit.
+  - Never promises official exam pass guarantees.
+- **Escalation Script**:
+  - Handles crisis/medical/emergency queries gracefully: *"I hear you, and your safety is very important. As an AI learning tutor, I cannot help with personal emergencies, so please speak with a parent, teacher, or trusted adult right away."*
 
 ---
 
-## 🚀 Setup & Installation
+## ⚡ Performance Metrics
+- **TTS Model Latency:** ~55 ms (Murf Falcon)
+- **Live Measured Time-To-First-Audio (TTFA):** **304.31 ms**
 
-Each day's work is stacked inside its respective folder (`day-1/`, `day-2/`, etc.). 
+---
 
-To run Day 1 locally:
+## 🚀 How to Run Locally
+
 ```powershell
-cd day-1
+cd C:\Users\mnsat\Desktop\voice-for-bharat-challenge
 .\start_app.ps1
 ```
 
-For environment configuration, see [day-1/.env.example](./day-1/.env.example).
+Open [http://localhost:3000](http://localhost:3000) in your browser and click **🎓 Connect to Vidya Vani**!
 
 ---
 

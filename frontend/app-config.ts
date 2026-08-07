@@ -48,10 +48,10 @@ export const APP_CONFIG_DEFAULTS: AppConfig = {
   accentDark: '#a78bfa',
   startButtonText: '🎓 Connect to Vidya Vani',
 
-  audioVisualizerType: 'bar',
+  audioVisualizerType: 'wave',
   audioVisualizerColor: '#7c3aed',
   audioVisualizerColorDark: '#a78bfa',
-  audioVisualizerBarCount: 7,
+  audioVisualizerWaveLineWidth: 3,
 
   // agent dispatch configuration
   agentName: process.env.AGENT_NAME ?? undefined,

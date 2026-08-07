@@ -40,11 +40,12 @@ export const WelcomeView = ({
         <Button
           size="lg"
           onClick={onStartCall}
-          className="mt-6 w-64 rounded-full font-mono text-xs font-bold tracking-wider uppercase"
+          className="mt-6 w-72 h-12 rounded-full font-sans text-sm font-bold tracking-wide uppercase bg-purple-600 hover:bg-purple-700 active:scale-95 text-white shadow-xl hover:shadow-purple-500/40 transition-all cursor-pointer border border-purple-400/30 flex items-center justify-center gap-2"
         >
           {startButtonText}
         </Button>
       </section>
+
 
       <div className="fixed bottom-5 left-0 flex w-full items-center justify-center">
         <p className="text-muted-foreground max-w-prose pt-1 text-xs leading-5 font-normal text-pretty md:text-sm">

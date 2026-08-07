@@ -35,7 +35,7 @@ export interface AppConfig {
 export const APP_CONFIG_DEFAULTS: AppConfig = {
   companyName: 'Murf AI — #VoiceForBharat',
   pageTitle: 'Vidya Vani (विद्या वाणी) — Voice AI Tutor for Bharat',
-  pageDescription: 'Learning & Literacy Track — Powered by Murf Falcon TTS (Interactive Indian Voices)',
+  pageDescription: 'Learning & Literacy Track — Powered by Murf Falcon TTS (Indian Voices)',
 
   supportsChatInput: true,
   supportsVideoInput: false,
@@ -48,10 +48,10 @@ export const APP_CONFIG_DEFAULTS: AppConfig = {
   accentDark: '#a78bfa',
   startButtonText: '🎓 Connect to Vidya Vani',
 
-  audioVisualizerType: 'wave',
+  audioVisualizerType: 'bar',
   audioVisualizerColor: '#7c3aed',
   audioVisualizerColorDark: '#a78bfa',
-  audioVisualizerWaveLineWidth: 3,
+  audioVisualizerBarCount: 7,
 
   // agent dispatch configuration
   agentName: process.env.AGENT_NAME ?? undefined,
@@ -59,5 +59,3 @@ export const APP_CONFIG_DEFAULTS: AppConfig = {
   // LiveKit Cloud Sandbox configuration
   sandboxId: undefined,
 };
-
-

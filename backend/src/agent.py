@@ -18,7 +18,11 @@ from livekit.agents import (
 from livekit.plugins import murf, silero, google, deepgram, noise_cancellation
 from livekit.plugins.turn_detector.multilingual import MultilingualModel
 
-import src.db as db
+import sys
+from pathlib import Path
+
+sys.path.append(str(Path(__file__).parent))
+import db as db
 
 logger = logging.getLogger("agent")
 
@@ -71,10 +75,10 @@ class Assistant(Agent):
     def __init__(self) -> None:
         super().__init__(instructions=SYSTEM_PROMPT)
 
-    @llm.ai_callable(description="Look up a returning caller by name or ID in SQLite memory database.")
+    @llm.function_tool(description="Look up a returning caller by name or ID in SQLite memory database.")
     def lookup_caller_memory(
         self,
-        name: Annotated[str, llm.TypeInfo(description="Name or identifier of caller")],
+        name: Annotated[str, "Name or identifier of caller"],
     ) -> str:
         logger.info(f"🔍 [MEMORY LOOKUP TOOL] Checking memory for caller '{name}'...")
         res = db.lookup_caller(name)
@@ -90,15 +94,15 @@ class Assistant(Agent):
         logger.info(f"ℹ️ [MEMORY NOT FOUND] Caller '{name}' is a new learner.")
         return "No prior memory record found for this caller."
 
-    @llm.ai_callable(description="Save caller learning progress and facts to SQLite memory database after obtaining explicit consent.")
+    @llm.function_tool(description="Save caller learning progress and facts to SQLite memory database after obtaining explicit consent.")
     def save_caller_memory(
         self,
-        name: Annotated[str, llm.TypeInfo(description="Name of the caller")],
-        language_preference: Annotated[str, llm.TypeInfo(description="Language choice (Hinglish/English/Hindi)")],
-        grade_or_level: Annotated[str, llm.TypeInfo(description="Learning level or grade")],
-        topics_covered: Annotated[str, llm.TypeInfo(description="Topics practiced in this call")],
-        frequent_mistakes: Annotated[str, llm.TypeInfo(description="Mistakes or areas to practice")],
-        consent_given: Annotated[bool, llm.TypeInfo(description="True if caller gave explicit consent to save memory")],
+        name: Annotated[str, "Name of the caller"],
+        language_preference: Annotated[str, "Language choice (Hinglish/English/Hindi)"],
+        grade_or_level: Annotated[str, "Learning level or grade"],
+        topics_covered: Annotated[str, "Topics practiced in this call"],
+        frequent_mistakes: Annotated[str, "Mistakes or areas to practice"],
+        consent_given: Annotated[bool, "True if caller gave explicit consent to save memory"],
     ) -> str:
         logger.info(f"💾 [MEMORY SAVE TOOL] Saving memory for caller '{name}' (Consent={consent_given})...")
         res = db.save_caller_memory(

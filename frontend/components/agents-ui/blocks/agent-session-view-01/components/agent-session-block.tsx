@@ -241,6 +241,18 @@ export function AgentSessionView_01({
         {...BOTTOM_VIEW_MOTION_PROPS}
         className="absolute inset-x-3 bottom-0 z-50 md:inset-x-12"
       >
+        {/* Live Subtitles Overlay Bar */}
+        {!chatOpen && messages.length > 0 && (
+          <div className="pointer-events-none mx-auto mb-4 w-full max-w-xl text-center px-4">
+            <div className="inline-block rounded-2xl bg-black/80 px-5 py-2.5 text-sm font-medium text-white shadow-2xl backdrop-blur-lg border border-white/15 transition-all animate-in fade-in slide-in-from-bottom-2 duration-300">
+              <span className="mr-2 font-bold text-purple-400">
+                {messages.at(-1)?.from?.isLocal ? '👤 You:' : '🎓 Vidya Vani:'}
+              </span>
+              <span className="text-gray-100">{messages.at(-1)?.message}</span>
+            </div>
+          </div>
+        )}
+
         {/* Pre-connect message */}
         {isPreConnectBufferEnabled && (
           <AnimatePresence>

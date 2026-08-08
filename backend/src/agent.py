@@ -1,5 +1,6 @@
 import logging
 import time
+from typing import Annotated
 from dotenv import load_dotenv
 from livekit import rtc
 from livekit.agents import (
@@ -12,54 +13,54 @@ from livekit.agents import (
     inference,
     tokenize,
     room_io,
+    llm,
 )
 from livekit.plugins import murf, silero, google, deepgram, noise_cancellation
 from livekit.plugins.turn_detector.multilingual import MultilingualModel
+
+import src.db as db
 
 logger = logging.getLogger("agent")
 
 load_dotenv(".env.local")
 
 # =============================================================================
-# Day 2 — Personality, Call Objectives & Guardrails
+# Day 4 — Personality, Memory (SQLite) & Guardrails
 # Track 3: Learning & Literacy — Vidya Vani (Voice AI Tutor for Bharat)
-# Voice Choice Justification:
-# We selected Murf's 'Pooja' (Indian English / Hindi, Expressive style) because an
-# interactive learning tutor requires a warm, enthusiastic, patient, and encouraging
-# voice that keeps learners of all ages engaged and builds confidence.
 # =============================================================================
 SYSTEM_PROMPT = """[IDENTITY]
 You are Vidya Vani (विद्या वाणी), an empathetic, patient, and highly interactive Voice AI Tutor built specifically for the Learning & Literacy track as part of the #VoiceForBharat initiative by Murf AI.
 
+[DAY 4 PERSISTENT MEMORY DIRECTIVES & CONSENT RULES]
+1. RETURNING CALLER RECOGNITION:
+   - When a caller tells you their name (e.g. "My name is Aarav" or "Main Aarav hun"), IMMEDIATELY call the `lookup_caller_memory` tool.
+   - IF A MATCH IS FOUND: Welcome them back warmly by name and reference their stored facts!
+     Example: "Namaste Aarav! Welcome back to Vidya Vani. Last time we practiced English vocabulary and multiplication. Would you like to continue from there?"
+   - IF NO MATCH IS FOUND: Welcome them warmly as a new learner!
+
+2. CONSENT BEFORE SAVING (HARD RULE):
+   - BEFORE saving any facts or details, ALWAYS ask for consent:
+     "May I save your name and learning progress so I can remember where we left off next time?"
+   - IF THEY SAY YES: Call the `save_caller_memory` tool to save their name, grade/level, topics covered, and mistakes.
+   - IF THEY SAY NO: DO NOT save anything! Respect their decision.
+
 [STRICT MANDATE: TOPIC SCOPE & REFUSAL RULE]
 - YOU ARE STRICTLY AN EDUCATIONAL TUTOR FOR LEARNING & LITERACY (Vocabulary, Math, Grammar, Reading, Storytelling).
-- IF THE USER ASKS ANY NON-EDUCATIONAL QUESTION, OFF-TOPIC QUESTION, OR QUESTION FROM OTHER SECTORS (e.g. agriculture, crop/mandi prices, medical advice, stock/financial tips, news, politics, shopping, or personal queries):
-  YOU MUST IMMEDIATELY REFUSE AND PIVOT BACK TO EDUCATION.
+- IF THE USER ASKS ANY NON-EDUCATIONAL QUESTION OR QUESTION FROM OTHER SECTORS (agriculture, crop prices, medical advice, stocks, news, politics):
   Refusal Statement: "I am Vidya Vani, your learning and literacy tutor! I can only help you with learning, vocabulary, math, and reading practice. Let us get back to our lesson! What topic would you like to practice today?"
-  DO NOT answer, restate, elaborate on, or discuss the non-educational/other-sector topic at all.
+  DO NOT answer or discuss the off-topic query.
 
 [CALL OBJECTIVES]
-A successful interaction with Vidya Vani achieves the following:
-1. First-Turn Greeting & Goal Identification: Welcome the learner with a warm, encouraging greeting and identify their learning goal (e.g. English/Hindi vocabulary, mental math puzzle, basic grammar, or storytelling).
-2. Interactive Practice & Code-Mixed Tutoring: Conduct active learning exercises using clear explanations. Adapt naturally to the learner's language mix (English, Hindi, or Hinglish).
-3. Positive Reinforcement & Constructive Feedback: Praise correct responses. If an answer is wrong, guide the learner with gentle hints rather than giving raw answers immediately.
-
-[KNOWLEDGE BOUNDARIES]
-- Scope: Elementary & foundational K-12 subjects, basic English/Hindi vocabulary, elementary arithmetic, storytelling, and conversational literacy.
-- Limits: REFUSE ALL NON-EDUCATIONAL / OTHER SECTOR TOPICS IMMEDIATELY.
-
-[LANGUAGE & REGISTER]
-- Seamlessly support code-mixed Indian English and Hinglish (e.g. "Shabaash! That is correct", "Aapka answer bilkul sahi hai!").
-- Keep tone warm, cheerful, respectful, and encouraging.
+1. First-Turn Greeting & Memory Check: Welcome the learner. If returning caller, greet by name and recall prior facts; if new caller, introduce yourself.
+2. Interactive Practice & Code-Mixed Tutoring: Conduct active learning exercises using clear explanations in English, Hindi, or Hinglish.
+3. Positive Reinforcement Loop: Praise correct responses; guide wrong answers with gentle hints.
 
 [GUARDRAILS & NEVER-CLAIMS]
-1. HARD REFUSAL: Refuse to process inappropriate, harmful, offensive, or non-educational queries. State: "I am Vidya Vani, your learning tutor! Let us get back to our lesson."
-2. NEVER-CLAIMS:
-   - NEVER shame, scold, or degrade a learner for making mistakes.
-   - NEVER claim or diagnose that a child or learner has a learning disability, deficit, or medical condition.
-   - NEVER claim official board exam accreditation or guarantee pass results.
-3. ESCALATION SCRIPT:
-   - If a learner expresses distress, personal crisis, or asks for non-educational emergency/medical help, say: "I hear you, and your safety and well-being are very important. As an AI learning tutor, I cannot help with personal emergencies, so please speak with a parent, teacher, or trusted adult right away."
+1. HARD REFUSAL: Refuse off-topic or non-educational queries immediately.
+2. NEVER SHAME: NEVER shame, scold, or degrade a learner for making mistakes.
+3. NEVER DIAGNOSE: NEVER claim or diagnose that a child or learner has a learning disability, deficit, or medical condition.
+4. NEVER GUARANTEE: NEVER claim official board exam accreditation or guarantee pass results.
+5. ESCALATION SCRIPT: For crisis/emergencies, say: "I hear you, and your safety and well-being are very important. As an AI learning tutor, I cannot help with personal emergencies, so please speak with a parent, teacher, or trusted adult right away."
 
 [FORMATTING RULES FOR SPEECH]
 - Keep responses concise (2 to 3 sentences maximum per turn) for ultra-low latency speech generation over Murf Falcon TTS.
@@ -69,6 +70,48 @@ A successful interaction with Vidya Vani achieves the following:
 class Assistant(Agent):
     def __init__(self) -> None:
         super().__init__(instructions=SYSTEM_PROMPT)
+
+    @llm.ai_callable(description="Look up a returning caller by name or ID in SQLite memory database.")
+    def lookup_caller_memory(
+        self,
+        name: Annotated[str, llm.TypeInfo(description="Name or identifier of caller")],
+    ) -> str:
+        logger.info(f"🔍 [MEMORY LOOKUP TOOL] Checking memory for caller '{name}'...")
+        res = db.lookup_caller(name)
+        if res:
+            logger.info(f"✅ [MEMORY FOUND] Caller '{name}' has existing record in SQLite DB.")
+            return (
+                f"Found returning learner record for {res['name']}: "
+                f"Language preference={res['language_preference']}, "
+                f"Level={res['facts'].get('grade_or_level', 'Beginner')}, "
+                f"Topics covered={res['facts'].get('topics_covered', 'Basic Math')}, "
+                f"Frequent mistakes={res['facts'].get('frequent_mistakes', 'None')}."
+            )
+        logger.info(f"ℹ️ [MEMORY NOT FOUND] Caller '{name}' is a new learner.")
+        return "No prior memory record found for this caller."
+
+    @llm.ai_callable(description="Save caller learning progress and facts to SQLite memory database after obtaining explicit consent.")
+    def save_caller_memory(
+        self,
+        name: Annotated[str, llm.TypeInfo(description="Name of the caller")],
+        language_preference: Annotated[str, llm.TypeInfo(description="Language choice (Hinglish/English/Hindi)")],
+        grade_or_level: Annotated[str, llm.TypeInfo(description="Learning level or grade")],
+        topics_covered: Annotated[str, llm.TypeInfo(description="Topics practiced in this call")],
+        frequent_mistakes: Annotated[str, llm.TypeInfo(description="Mistakes or areas to practice")],
+        consent_given: Annotated[bool, llm.TypeInfo(description="True if caller gave explicit consent to save memory")],
+    ) -> str:
+        logger.info(f"💾 [MEMORY SAVE TOOL] Saving memory for caller '{name}' (Consent={consent_given})...")
+        res = db.save_caller_memory(
+            name=name,
+            language_preference=language_preference,
+            grade_or_level=grade_or_level,
+            topics_covered=topics_covered,
+            frequent_mistakes=frequent_mistakes,
+            consent_given=consent_given,
+        )
+        if res["status"] == "saved":
+            return f"Memory successfully saved to SQLite database for learner {name}."
+        return "Memory storage declined by caller."
 
 
 server = AgentServer()
@@ -87,10 +130,10 @@ async def my_agent(ctx: JobContext):
         "room": ctx.room.name,
         "track": "Learning & Literacy",
         "agent": "Vidya Vani",
-        "day": "Day 2",
+        "day": "Day 4",
     }
 
-    logger.info("Initializing Vidya Vani Voice Tutor (Day 2: Personality & Guardrails) with Murf Falcon TTS (Voice: Pooja)...")
+    logger.info("Initializing Vidya Vani Voice Tutor (Day 4: Memory & Guardrails) with Murf Falcon TTS (Voice: Pooja)...")
 
     # Set up voice AI pipeline using Murf Falcon TTS (Indian English: Pooja / Anisha)
     session = AgentSession(
@@ -148,6 +191,7 @@ async def my_agent(ctx: JobContext):
 
 if __name__ == "__main__":
     cli.run_app(server)
+
 
 
 

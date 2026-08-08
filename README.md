@@ -4,33 +4,33 @@
 **Track:** 📚 **Learning & Literacy**  
 **TTS Engine:** Powered by **Murf Falcon 2** (Fastest Production Speech Synthesis API)  
 **Selected Voice:** `Pooja` (Indian English / Hindi - Expressive & Conversational style)  
+**Memory Storage:** SQLite 3 (`backend/memory.db`)  
 
 ---
 
-## 📅 Challenge Progress & Day 2 Implementation Summary
+## 📅 Challenge Progress & Implementation Summary
 
 | Day | Feature Milestone | Status | Key Deliverables |
 | :---: | :--- | :---: | :--- |
 | **Day 1** | **Get Your Voice Agent Talking** | ✅ Done | Murf Falcon TTS (`Pooja`), ~304ms Time-To-First-Audio, LiveKit WebRTC pipeline, Latency logger. |
 | **Day 2** | **Personality, Call Objectives & Guardrails** | ✅ Done | Defined 3 Call Objectives, Hard Refusals, Never-Claims (No shaming, no medical/disability diagnosis), Escalation Script, Code-Mixed Hinglish support. |
+| **Day 3** | **Personalise Your Agent's Frontend** | ✅ Done | Personalised Learning & Literacy purple UI, 5 clear agent states (`Ready`, `Connecting`, `Listening`, `Speaking`, `Call ended`), Wave Audio Visualizer, Microphone error handler. |
+| **Day 4** | **Give Your Agent a Memory That Lasts** | ✅ Done | SQLite DB integration (`users` table), `lookup_caller_memory` & `save_caller_memory` tools, returning caller recognition by name, consent-first memory rule. |
 
 ---
 
-## 🎯 Day 2 Breakdown: Personality & Guardrails
+## 🎯 Day 4 Breakdown: Persistent Memory & Consent
 
-### 1. Call Objectives
-1. **First-Turn Greeting & Goal Identification**: Welcome the learner and identify their goal (Vocabulary, Math, Grammar, or Storytelling).
-2. **Interactive Code-Mixed Practice**: Teach using clear explanations, mirroring the learner's language mix (English, Hindi, Hinglish).
-3. **Encouraging Feedback Loop**: Praise correct answers; guide wrong answers with gentle hints without raw spoilers.
+### 1. SQLite Database Schema (`users` table)
+- `user_id`: Primary Key (e.g. `aarav`)
+- `name`: Learner's name (e.g. `Aarav`)
+- `language_preference`: `Hinglish` / `English` / `Hindi`
+- `facts`: JSON object storing `grade_or_level`, `topics_covered`, `frequent_mistakes`
+- `consent_given`: `1` (True) or `0` (False)
 
-### 2. Guardrails & Refusals
-- **Hard Refusal**: Refuses inappropriate or non-educational topics (*"I am Vidya Vani, your learning tutor! Let us get back to our lesson."*).
-- **Never-Claims**:
-  - Never shames or scolds for wrong answers.
-  - Never diagnoses a child/learner with a learning disability or deficit.
-  - Never promises official exam pass guarantees.
-- **Escalation Script**:
-  - Handles crisis/medical/emergency queries gracefully: *"I hear you, and your safety is very important. As an AI learning tutor, I cannot help with personal emergencies, so please speak with a parent, teacher, or trusted adult right away."*
+### 2. Two-Call Test Flow
+- **Call 1 (New Caller)**: User says *"My name is Aarav"*. Agent introduces itself, asks for consent (*"May I save your name and learning progress so I remember next time?"*), and saves facts upon approval.
+- **Call 2 (Returning Caller)**: User says *"Namaste, main Aarav hun"*. Agent uses `lookup_caller_memory` tool, greets Aarav by name, and recalls previous topics (*"Welcome back Aarav! Last time we practiced English vocabulary and multiplication."*).
 
 ---
 

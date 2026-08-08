@@ -92,7 +92,7 @@ export function TileLayout({
   audioVisualizerGridColumnCount,
   audioVisualizerWaveLineWidth,
 }: TileLayoutProps) {
-  const { videoTrack: agentVideoTrack } = useVoiceAssistant();
+  const { videoTrack: agentVideoTrack, state: agentState } = useVoiceAssistant();
   const [screenShareTrack] = useTracks([Track.Source.ScreenShare]);
   const cameraTrack: TrackReference | undefined = useLocalTrackRef(Track.Source.Camera);
 
@@ -105,9 +105,35 @@ export function TileLayout({
   const videoWidth = agentVideoTrack?.publication.dimensions?.width ?? 0;
   const videoHeight = agentVideoTrack?.publication.dimensions?.height ?? 0;
 
+  // Day 3 Step 2: Clear Agent State Status Text
+  const getStatusText = (state: string) => {
+    switch (state) {
+      case 'connecting':
+        return { text: '⏳ Connecting to Vidya Vani... Please wait', bg: 'bg-amber-500/20 text-amber-300 border-amber-500/40' };
+      case 'listening':
+        return { text: '🎙️ Listening to you...', bg: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40' };
+      case 'speaking':
+        return { text: '🔊 Vidya Vani is speaking...', bg: 'bg-purple-500/20 text-purple-300 border-purple-500/40' };
+      case 'thinking':
+        return { text: '🧠 Thinking...', bg: 'bg-blue-500/20 text-blue-300 border-blue-500/40' };
+      case 'disconnected':
+      case 'failed':
+        return { text: '🔴 Call Ended — Click to Start Again', bg: 'bg-rose-500/20 text-rose-300 border-rose-500/40' };
+      default:
+        return { text: '🟢 Connected to Vidya Vani', bg: 'bg-purple-500/20 text-purple-300 border-purple-500/40' };
+    }
+  };
+
+  const statusInfo = getStatusText(agentState);
+
   return (
-    <div className="absolute inset-x-0 top-8 bottom-32 z-50 md:top-12 md:bottom-40">
-      <div className="relative mx-auto h-full max-w-2xl px-4 md:px-0">
+    <div className="absolute inset-x-0 top-8 bottom-32 z-50 md:top-12 md:bottom-40 flex flex-col items-center">
+      {/* Day 3 Step 2: Prominent Agent State Badge */}
+      <div className={cn('mb-4 px-4 py-1.5 rounded-full border text-xs font-semibold tracking-wide shadow-lg backdrop-blur-md transition-all', statusInfo.bg)}>
+        {statusInfo.text}
+      </div>
+
+      <div className="relative mx-auto h-full max-w-2xl px-4 md:px-0 w-full">
         <div className={cn(tileViewClassNames.grid)}>
           {/* Agent */}
           <div

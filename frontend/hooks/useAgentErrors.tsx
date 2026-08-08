@@ -29,6 +29,30 @@ export function useAgentErrors() {
   const { isConnected, end } = useSessionContext();
 
   useEffect(() => {
+    const handleRejection = (event: PromiseRejectionEvent) => {
+      const errName = event.reason?.name || '';
+      const errMsg = event.reason?.message || '';
+
+      if (errName === 'NotAllowedError' || errMsg.includes('Permission denied') || errMsg.includes('permission')) {
+        toastAlert({
+          title: '🎙️ Microphone Access Blocked',
+          description: (
+            <div className="space-y-1 text-xs">
+              <p className="font-semibold text-red-500">Microphone permission was denied by your browser.</p>
+              <p>1. Click the 🔒 Lock icon next to localhost:3000 in your browser URL bar.</p>
+              <p>2. Change Microphone setting to <strong>Allow</strong>.</p>
+              <p>3. Refresh the page and click Connect to try again.</p>
+            </div>
+          ),
+        });
+      }
+    };
+
+    window.addEventListener('unhandledrejection', handleRejection);
+    return () => window.removeEventListener('unhandledrejection', handleRejection);
+  }, []);
+
+  useEffect(() => {
     if (isConnected && agent.state === 'failed') {
       const reasons = agent.failureReasons;
 

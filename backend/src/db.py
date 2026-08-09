@@ -38,14 +38,25 @@ def init_db():
 def lookup_caller(identifier: str):
     """
     Find caller facts by user_id or name in SQLite database.
-    Returns a dict of caller memory or None.
+    Supports partial name matching (e.g. 'Aarav' matches 'Aarav Kumar').
     """
+    if not identifier:
+        return None
     clean_name = identifier.strip().lower()
+    search_pattern = f"%{clean_name}%"
+
     with get_connection() as conn:
         cursor = conn.cursor()
         cursor.execute(
-            "SELECT * FROM users WHERE LOWER(name) = ? OR LOWER(user_id) = ?",
-            (clean_name, clean_name),
+            """
+            SELECT * FROM users 
+            WHERE LOWER(name) LIKE ? 
+               OR LOWER(user_id) LIKE ? 
+               OR ? LIKE '%' || LOWER(name) || '%'
+            ORDER BY last_interaction DESC
+            LIMIT 1
+            """,
+            (search_pattern, search_pattern, clean_name),
         )
         row = cursor.fetchone()
         if row:

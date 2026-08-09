@@ -36,16 +36,16 @@ SYSTEM_PROMPT = """[IDENTITY]
 You are Vidya Vani (विद्या वाणी), an empathetic, patient, and highly interactive Voice AI Tutor built specifically for the Learning & Literacy track as part of the #VoiceForBharat initiative by Murf AI.
 
 [DAY 4 PERSISTENT MEMORY & CONSENT RULES - CRITICAL]
-1. CALLER LOOKUP MANDATE:
-   - As soon as the caller introduces themselves or gives their name (e.g., "My name is Aarav", "Main Ramesh hun", "I am Priya"), YOU MUST IMMEDIATELY CALL THE `lookup_caller_memory(name)` FUNCTION TOOL BEFORE ANSWERING.
-   - IF MATCH FOUND IN DB: Welcome them back by name! Recall their stored facts (level, topics, mistakes). Example: "Namaste Aarav! Welcome back to Vidya Vani. Last time we practiced multiplication and vocabulary. Ready to continue?"
-   - IF NO MATCH FOUND IN DB: Greet them as a new learner and introduce yourself.
+1. CALLER LOOKUP MANDATE (ALWAYS DO THIS FIRST):
+   - Whenever the user mentions their name (e.g., "I'm Tom", "My name is Aarav", "Main Ramesh hun", "Aarav"), YOU MUST FIRST INVOKE THE `lookup_caller_memory` TOOL.
+   - DO NOT reply with text until `lookup_caller_memory` has returned!
+   - IF MATCH FOUND IN DB: Welcome them back by name! Mention their previous topics (e.g. "Namaste Tom! Welcome back to Vidya Vani. Last time we practiced Vocabulary and Math. Ready to continue?")
+   - IF NO MATCH FOUND IN DB: Welcome them as a new learner and ask once for consent to save their progress.
 
 2. CONSENT BEFORE SAVING MANDATE (HARD RULE):
-   - BEFORE saving any facts or user progress, YOU MUST ASK FOR EXPLICIT CONSENT:
-     "May I save your name and learning progress so I can remember where we left off next time?"
-   - IF CALLER SAYS YES (e.g. "Yes", "Sure", "Haan", "Okay"): CALL `save_caller_memory(...)` IMMEDIATELY with consent_given=True.
-   - IF CALLER SAYS NO: DO NOT call save_caller_memory or store any data.
+   - For new learners, ask: "May I save your name and learning progress so I can remember where we left off next time?"
+   - WHEN THE USER SAYS YES (e.g. "Yes", "Sure", "Haan", "Okay"): CALL `save_caller_memory` IMMEDIATELY.
+   - IF THE USER SAYS NO: DO NOT call save_caller_memory.
 
 [STRICT MANDATE: TOPIC SCOPE & REFUSAL RULE]
 - YOU ARE STRICTLY AN EDUCATIONAL TUTOR FOR LEARNING & LITERACY (Vocabulary, Math, Grammar, Reading, Storytelling).
@@ -78,10 +78,12 @@ class Assistant(Agent):
     def __init__(self) -> None:
         super().__init__(instructions=SYSTEM_PROMPT)
 
-    @llm.function_tool(description="Look up a returning caller by name or ID in SQLite memory database.")
+    @llm.function_tool(
+        description="Search SQLite database for returning learner history and prior call facts by name. Call this IMMEDIATELY when the user tells you their name."
+    )
     def lookup_caller_memory(
         self,
-        name: Annotated[str, "Name or identifier of caller"],
+        name: Annotated[str, "The name or identity of the caller (e.g. 'Tom', 'Aarav', 'Ramesh')"],
     ) -> str:
         logger.info(f"[MEMORY LOOKUP TOOL] Checking memory for caller '{name}'...")
         res = db.lookup_caller(name)
@@ -93,20 +95,22 @@ class Assistant(Agent):
                 f"Level={res['facts'].get('grade_or_level', 'Beginner')}, "
                 f"Topics covered={res['facts'].get('topics_covered', 'Vocabulary & Math')}, "
                 f"Frequent mistakes={res['facts'].get('frequent_mistakes', 'None')}. "
-                f"CONSENT IS ALREADY GRANTED. Welcome them back by name and ask if they want to continue from where they left off!"
+                f"CONSENT IS ALREADY GRANTED. Greet them warmly by name '{res['name']}' and ask if they want to continue from where they left off!"
             )
         logger.info(f"[MEMORY NOT FOUND] Caller '{name}' is a new learner.")
         return f"Caller '{name}' is a new learner with no prior memory record. Ask if you may save their name and progress."
 
-    @llm.function_tool(description="Save caller learning progress and facts to SQLite memory database after obtaining explicit consent.")
+    @llm.function_tool(
+        description="Save learner profile, topics, and consent to SQLite database. Call this IMMEDIATELY when the user consents to saving data."
+    )
     def save_caller_memory(
         self,
-        name: Annotated[str, "Name of the caller"],
-        consent_given: Annotated[bool, "True if caller gave explicit consent"] = True,
-        language_preference: Annotated[str, "Language choice (Hinglish/English/Hindi)"] = "Hinglish",
-        grade_or_level: Annotated[str, "Learning level or grade"] = "Beginner",
-        topics_covered: Annotated[str, "Topics practiced in this call"] = "Vocabulary & Math",
-        frequent_mistakes: Annotated[str, "Mistakes or areas to practice"] = "None",
+        name: Annotated[str, "Name of the caller to save"],
+        consent_given: Annotated[bool, "True if caller agreed to memory storage"] = True,
+        language_preference: Annotated[str, "Language choice"] = "Hinglish",
+        grade_or_level: Annotated[str, "Grade or level"] = "Beginner",
+        topics_covered: Annotated[str, "Topics practiced in call"] = "Vocabulary & Math",
+        frequent_mistakes: Annotated[str, "Mistakes to practice"] = "None",
     ) -> str:
         logger.info(f"[MEMORY SAVE TOOL] Executing SQLite save for caller '{name}' (Consent={consent_given})...")
         res = db.save_caller_memory(

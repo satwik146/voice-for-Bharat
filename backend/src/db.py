@@ -35,30 +35,60 @@ def init_db():
     logger.info(f"[DB INIT] SQLite Memory Database initialized at {DB_PATH}")
 
 
+def clean_identifier(name_str: str) -> str:
+    s = name_str.strip().lower()
+    prefixes = [
+        "my name is ", "i am ", "i'm ", "im ", "mera naam ", 
+        "name is ", "naam hai ", "this is ", "it's ", "its "
+    ]
+    for p in prefixes:
+        if s.startswith(p):
+            s = s[len(p):].strip()
+    return s
+
+
 def lookup_caller(identifier: str):
     """
     Find caller facts by user_id or name in SQLite database.
-    Supports partial name matching (e.g. 'Aarav' matches 'Aarav Kumar').
+    Supports smart phrase cleaning and partial name matching.
     """
     if not identifier:
         return None
-    clean_name = identifier.strip().lower()
+    raw_name = identifier.strip().lower()
+    clean_name = clean_identifier(raw_name)
     search_pattern = f"%{clean_name}%"
 
     with get_connection() as conn:
         cursor = conn.cursor()
+        # 1. Try exact or partial match on cleaned name
         cursor.execute(
             """
             SELECT * FROM users 
-            WHERE LOWER(name) LIKE ? 
-               OR LOWER(user_id) LIKE ? 
+            WHERE LOWER(name) = ? 
+               OR LOWER(user_id) = ?
+               OR LOWER(name) LIKE ?
                OR ? LIKE '%' || LOWER(name) || '%'
+               OR ? LIKE '%' || LOWER(user_id) || '%'
             ORDER BY last_interaction DESC
             LIMIT 1
             """,
-            (search_pattern, search_pattern, clean_name),
+            (clean_name, clean_name, search_pattern, clean_name, raw_name),
         )
         row = cursor.fetchone()
+        
+        # 2. Fallback: match any single word in identifier if multi-word phrase
+        if not row and " " in clean_name:
+            words = [w for w in clean_name.split() if len(w) > 2]
+            for w in words:
+                w_pattern = f"%{w}%"
+                cursor.execute(
+                    "SELECT * FROM users WHERE LOWER(name) LIKE ? OR LOWER(user_id) LIKE ? ORDER BY last_interaction DESC LIMIT 1",
+                    (w_pattern, w_pattern),
+                )
+                row = cursor.fetchone()
+                if row:
+                    break
+
         if row:
             facts_data = json.loads(row["facts"]) if row["facts"] else {}
             return {

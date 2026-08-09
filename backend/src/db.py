@@ -76,12 +76,13 @@ def save_caller_memory(
     name: str,
     language_preference: str = "Hinglish",
     grade_or_level: str = "Beginner",
-    topics_covered: str = "Vocabulary & Basic Math",
+    activity_done: str = "Vocabulary & Math Practice",
+    topics_covered: str = "Vocabulary & Math Practice",
     frequent_mistakes: str = "None",
     consent_given: bool = True,
 ):
     """
-    Save or update caller details and learning facts in SQLite database if consent is granted.
+    Save or update caller details, name, and activity done in SQLite database if consent is granted.
     """
     if not consent_given:
         logger.info(f"[CONSENT DECLINED] Caller {name} declined memory storage consent. Nothing saved.")
@@ -90,7 +91,8 @@ def save_caller_memory(
     user_id = name.strip().lower().replace(" ", "_")
     facts_obj = {
         "grade_or_level": grade_or_level,
-        "topics_covered": topics_covered,
+        "activity_done": activity_done or topics_covered,
+        "topics_covered": topics_covered or activity_done,
         "frequent_mistakes": frequent_mistakes,
     }
     facts_json = json.dumps(facts_obj)

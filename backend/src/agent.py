@@ -79,7 +79,7 @@ class Assistant(Agent):
         super().__init__(instructions=SYSTEM_PROMPT)
 
     @llm.function_tool(
-        description="Search SQLite database for returning learner history and prior call facts by name. Call this IMMEDIATELY when the user tells you their name."
+        description="Search SQLite database for returning learner history, caller name, and last activity done. Call this IMMEDIATELY when the user tells you their name."
     )
     def lookup_caller_memory(
         self,
@@ -89,41 +89,42 @@ class Assistant(Agent):
         res = db.lookup_caller(name)
         if res:
             logger.info(f"[MEMORY FOUND] Caller '{name}' has existing record in SQLite DB.")
+            activity = res['facts'].get('activity_done') or res['facts'].get('topics_covered') or 'Vocabulary & Math Practice'
             return (
                 f"RETURNING LEARNER FOUND: Name={res['name']}, "
+                f"Activity Done / Last Topic={activity}, "
                 f"Language preference={res['language_preference']}, "
-                f"Level={res['facts'].get('grade_or_level', 'Beginner')}, "
-                f"Topics covered={res['facts'].get('topics_covered', 'Vocabulary & Math')}, "
-                f"Frequent mistakes={res['facts'].get('frequent_mistakes', 'None')}. "
-                f"CONSENT IS ALREADY GRANTED. Greet them warmly by name '{res['name']}' and ask if they want to continue from where they left off!"
+                f"Level={res['facts'].get('grade_or_level', 'Beginner')}. "
+                f"CONSENT IS ALREADY GRANTED. Greet them warmly by name '{res['name']}', recall their last activity done '{activity}', and ask if they want to continue from where they left off!"
             )
         logger.info(f"[MEMORY NOT FOUND] Caller '{name}' is a new learner.")
         return f"Caller '{name}' is a new learner with no prior memory record. Ask if you may save their name and progress."
 
     @llm.function_tool(
-        description="Save learner profile, topics, and consent to SQLite database. Call this IMMEDIATELY when the user consents to saving data."
+        description="Save learner name, activity done / topic practiced, and consent to SQLite database. Call this IMMEDIATELY when the user consents to saving data."
     )
     def save_caller_memory(
         self,
         name: Annotated[str, "Name of the caller to save"],
+        activity_done: Annotated[str, "The specific activity or topic practiced in this session (e.g. 'Math Multiplication', 'English Vocabulary Practice')"] = "Vocabulary & Math Practice",
         consent_given: Annotated[bool, "True if caller agreed to memory storage"] = True,
         language_preference: Annotated[str, "Language choice"] = "Hinglish",
         grade_or_level: Annotated[str, "Grade or level"] = "Beginner",
-        topics_covered: Annotated[str, "Topics practiced in call"] = "Vocabulary & Math",
         frequent_mistakes: Annotated[str, "Mistakes to practice"] = "None",
     ) -> str:
-        logger.info(f"[MEMORY SAVE TOOL] Executing SQLite save for caller '{name}' (Consent={consent_given})...")
+        logger.info(f"[MEMORY SAVE TOOL] Executing SQLite save for caller '{name}' (Activity='{activity_done}', Consent={consent_given})...")
         res = db.save_caller_memory(
             name=name,
+            activity_done=activity_done,
+            topics_covered=activity_done,
             language_preference=language_preference,
             grade_or_level=grade_or_level,
-            topics_covered=topics_covered,
             frequent_mistakes=frequent_mistakes,
             consent_given=consent_given,
         )
         if res["status"] == "saved":
-            logger.info(f"[MEMORY SAVE SUCCESS] {name} stored in memory.db")
-            return f"Memory successfully saved to SQLite database for learner {name}. DO NOT ask for consent again!"
+            logger.info(f"[MEMORY SAVE SUCCESS] Caller '{name}' and Activity '{activity_done}' stored in memory.db")
+            return f"Memory successfully saved to SQLite database for learner {name} with Activity '{activity_done}'. DO NOT ask for consent again!"
         return "Memory storage declined by caller."
 
 

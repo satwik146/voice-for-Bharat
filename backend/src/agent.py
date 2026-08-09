@@ -1,3 +1,4 @@
+import json
 import logging
 import time
 from typing import Annotated
@@ -100,12 +101,15 @@ class Assistant(Agent):
         record = db.lookup_caller(name)
         if record:
             logger.info(f"[MEMORY FOUND] Caller '{name}' has existing record in agent_data.db.")
-            facts_str = json.dumps(record['facts'])
+            facts_dict = record.get('facts', {})
+            topics = facts_dict.get('topics') or facts_dict.get('activity_done') or "Vocabulary Practice"
             return (
-                f"Found returning learner! Name: {record['name']}, "
-                f"Facts: {facts_str}, "
-                f"Last Interaction: {record['last_interaction']}. "
-                f"Greet them warmly by name '{record['name']}' and mention their past activity or topics to show you remember them!"
+                f"RETURNING LEARNER RECORD FOUND:\n"
+                f"Name: {record['name']}\n"
+                f"Topics Practiced Previously: {topics}\n"
+                f"Facts JSON: {json.dumps(facts_dict)}\n"
+                f"Last Interaction: {record['last_interaction']}\n\n"
+                f"INSTRUCTION: Greet {record['name']} warmly by name and explicitly state that last time you practiced '{topics}', then ask if they would like to continue with '{topics}' or try a new activity!"
             )
         logger.info(f"[MEMORY NOT FOUND] Caller '{name}' is a new learner.")
         return "Caller not found."
@@ -134,7 +138,7 @@ class Assistant(Agent):
             "mistakes": mistakes,
         }
         db.save_caller(name, facts, language_preference="Hinglish")
-        logger.info(f"[MEMORY SAVE SUCCESS] {name} stored in agent_data.db")
+        logger.info(f"[MEMORY SAVE SUCCESS] {name} stored in agent_data.db with topics '{topics}'")
         return f"Caller info for {name} saved successfully with topics '{topics}'."
 
     @function_tool(
@@ -143,11 +147,12 @@ class Assistant(Agent):
     async def save_caller_memory(
         self,
         name: str,
-        activity_done: str = "Vocabulary & Math Practice",
-        topics_covered: str = "Vocabulary & Math Practice",
+        activity_done: str = "Vocabulary Practice",
+        topics_covered: str = "Vocabulary Practice",
         consent_given: bool = True,
     ) -> str:
-        return await self.save_caller_info(name=name, topics=activity_done or topics_covered)
+        topics_to_save = activity_done if activity_done and "consent" not in activity_done.lower() else (topics_covered if topics_covered and "consent" not in topics_covered.lower() else "Vocabulary Practice")
+        return await self.save_caller_info(name=name, topics=topics_to_save)
 
     @function_tool(
         description="Forget all details about a caller if they request it."

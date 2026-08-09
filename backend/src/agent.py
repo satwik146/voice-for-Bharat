@@ -40,13 +40,17 @@ You are Vidya Vani (विद्या वाणी), an empathetic, patient, an
 1. CALLER LOOKUP MANDATE (ALWAYS DO THIS FIRST):
    - Whenever the user mentions their name (e.g., "I'm Tom", "My name is Aarav", "Main Ramesh hun", "Aarav"), YOU MUST FIRST INVOKE THE `lookup_caller_memory` TOOL.
    - DO NOT reply with text until `lookup_caller_memory` has returned!
-   - IF MATCH FOUND IN DB: Welcome them back by name! Mention their previous topics (e.g. "Namaste Tom! Welcome back to Vidya Vani. Last time we practiced Vocabulary and Math. Ready to continue?")
+   - IF MATCH FOUND IN DB: Welcome them back by name! Explicitly mention their previous topics (e.g. "Namaste Tom! Welcome back to Vidya Vani. Last time we practiced Vocabulary. Ready to continue?")
    - IF NO MATCH FOUND IN DB: Welcome them as a new learner and ask once for consent to save their progress.
 
 2. CONSENT BEFORE SAVING MANDATE (HARD RULE):
    - For new learners, ask: "May I save your name and learning progress so I can remember where we left off next time?"
    - WHEN THE USER SAYS YES (e.g. "Yes", "Sure", "Haan", "Okay"): CALL `save_caller_memory` IMMEDIATELY.
    - IF THE USER SAYS NO: DO NOT call save_caller_memory.
+
+3. AUTOMATIC TOPIC UPDATE MANDATE (HARD RULE):
+   - Whenever the learner chooses, practices, or completes a lesson topic (e.g. Vocabulary, Math, Reading, Storytelling), YOU MUST IMMEDIATELY CALL `save_caller_info` or `save_caller_memory` WITH THAT SPECIFIC PRACTICE TOPIC.
+   - NEVER leave their saved topic as 'Introduction' or 'Consent given'.
 
 [STRICT MANDATE: TOPIC SCOPE & REFUSAL RULE]
 - YOU ARE STRICTLY AN EDUCATIONAL TUTOR FOR LEARNING & LITERACY (Vocabulary, Math, Grammar, Reading, Storytelling).
@@ -102,7 +106,11 @@ class Assistant(Agent):
         if record:
             logger.info(f"[MEMORY FOUND] Caller '{name}' has existing record in agent_data.db.")
             facts_dict = record.get('facts', {})
-            topics = facts_dict.get('topics') or facts_dict.get('activity_done') or "Vocabulary Practice"
+            raw_topics = facts_dict.get('topics') or facts_dict.get('activity_done') or "Vocabulary & Math Practice"
+            if any(k in raw_topics.lower() for k in ["intro", "consent", "greeting"]):
+                topics = "Vocabulary & Math Practice"
+            else:
+                topics = raw_topics
             return (
                 f"RETURNING LEARNER RECORD FOUND:\n"
                 f"Name: {record['name']}\n"
@@ -130,16 +138,25 @@ class Assistant(Agent):
         topics: str = "Vocabulary & Math Practice",
         mistakes: str = "None",
     ) -> str:
-        logger.info(f"[MEMORY SAVE TOOL] Executing save for caller '{name}' (Topics='{topics}')...")
+        # Sanitize topic so initial consent doesn't lock topic to 'Introduction'
+        clean_topic = topics
+        if not clean_topic or any(k in clean_topic.lower() for k in ["intro", "consent", "greeting"]):
+            existing = db.lookup_caller(name)
+            if existing and existing.get('facts', {}).get('topics') and not any(k in str(existing['facts']['topics']).lower() for k in ["intro", "consent"]):
+                clean_topic = existing['facts']['topics']
+            else:
+                clean_topic = "Vocabulary & Math Practice"
+
+        logger.info(f"[MEMORY SAVE TOOL] Executing save for caller '{name}' (Topics='{clean_topic}')...")
         facts = {
             "current_level": current_level,
-            "activity_done": topics,
-            "topics": topics,
+            "activity_done": clean_topic,
+            "topics": clean_topic,
             "mistakes": mistakes,
         }
         db.save_caller(name, facts, language_preference="Hinglish")
-        logger.info(f"[MEMORY SAVE SUCCESS] {name} stored in agent_data.db with topics '{topics}'")
-        return f"Caller info for {name} saved successfully with topics '{topics}'."
+        logger.info(f"[MEMORY SAVE SUCCESS] {name} stored in agent_data.db with topics '{clean_topic}'")
+        return f"Caller info for {name} saved successfully with topics '{clean_topic}'."
 
     @function_tool(
         description="Save caller details, learning level, topics covered, and activity done. ALWAYS ask permission from the user before using this!"
@@ -147,12 +164,12 @@ class Assistant(Agent):
     async def save_caller_memory(
         self,
         name: str,
-        activity_done: str = "Vocabulary Practice",
-        topics_covered: str = "Vocabulary Practice",
+        activity_done: str = "Vocabulary & Math Practice",
+        topics_covered: str = "Vocabulary & Math Practice",
         consent_given: bool = True,
     ) -> str:
-        topics_to_save = activity_done if activity_done and "consent" not in activity_done.lower() else (topics_covered if topics_covered and "consent" not in topics_covered.lower() else "Vocabulary Practice")
-        return await self.save_caller_info(name=name, topics=topics_to_save)
+        raw_topic = activity_done or topics_covered
+        return await self.save_caller_info(name=name, topics=raw_topic)
 
     @function_tool(
         description="Forget all details about a caller if they request it."

@@ -88,15 +88,15 @@ class Assistant(Agent):
         if res:
             logger.info(f"[MEMORY FOUND] Caller '{name}' has existing record in SQLite DB.")
             return (
-                f"Found returning learner record for {res['name']}: "
+                f"RETURNING LEARNER FOUND: Name={res['name']}, "
                 f"Language preference={res['language_preference']}, "
                 f"Level={res['facts'].get('grade_or_level', 'Beginner')}, "
-                f"Topics covered={res['facts'].get('topics_covered', 'Basic Math')}, "
-                f"Frequent mistakes={res['facts'].get('frequent_mistakes', 'None')}."
-                f"CONSENT_ALREADY_GRANTED=True."
+                f"Topics covered={res['facts'].get('topics_covered', 'Vocabulary & Math')}, "
+                f"Frequent mistakes={res['facts'].get('frequent_mistakes', 'None')}. "
+                f"CONSENT IS ALREADY GRANTED. Welcome them back by name and ask if they want to continue from where they left off!"
             )
         logger.info(f"[MEMORY NOT FOUND] Caller '{name}' is a new learner.")
-        return "No prior memory record found for this caller."
+        return f"Caller '{name}' is a new learner with no prior memory record. Ask if you may save their name and progress."
 
     @llm.function_tool(description="Save caller learning progress and facts to SQLite memory database after obtaining explicit consent.")
     def save_caller_memory(
@@ -196,6 +196,12 @@ async def my_agent(ctx: JobContext):
     )
 
     await ctx.connect()
+
+    # Initial greeting prompting for caller name to trigger memory lookup
+    await session.say(
+        "Namaste! Welcome to Vidya Vani. What is your name, so I can check your learning progress?",
+        allow_interruptions=True,
+    )
 
 
 if __name__ == "__main__":

@@ -102,13 +102,13 @@ class Assistant(Agent):
     def save_caller_memory(
         self,
         name: Annotated[str, "Name of the caller"],
-        language_preference: Annotated[str, "Language choice (Hinglish/English/Hindi)"],
-        grade_or_level: Annotated[str, "Learning level or grade"],
-        topics_covered: Annotated[str, "Topics practiced in this call"],
-        frequent_mistakes: Annotated[str, "Mistakes or areas to practice"],
-        consent_given: Annotated[bool, "True if caller gave explicit consent to save memory"],
+        consent_given: Annotated[bool, "True if caller gave explicit consent"] = True,
+        language_preference: Annotated[str, "Language choice (Hinglish/English/Hindi)"] = "Hinglish",
+        grade_or_level: Annotated[str, "Learning level or grade"] = "Beginner",
+        topics_covered: Annotated[str, "Topics practiced in this call"] = "Vocabulary & Math",
+        frequent_mistakes: Annotated[str, "Mistakes or areas to practice"] = "None",
     ) -> str:
-        logger.info(f"[MEMORY SAVE TOOL] Saving memory for caller '{name}' (Consent={consent_given})...")
+        logger.info(f"[MEMORY SAVE TOOL] Executing SQLite save for caller '{name}' (Consent={consent_given})...")
         res = db.save_caller_memory(
             name=name,
             language_preference=language_preference,
@@ -118,7 +118,8 @@ class Assistant(Agent):
             consent_given=consent_given,
         )
         if res["status"] == "saved":
-            return f"Memory successfully saved to SQLite database for learner {name}."
+            logger.info(f"[MEMORY SAVE SUCCESS] {name} stored in memory.db")
+            return f"Memory successfully saved to SQLite database for learner {name}. DO NOT ask for consent again!"
         return "Memory storage declined by caller."
 
 

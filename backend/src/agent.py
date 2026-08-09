@@ -74,58 +74,90 @@ You are Vidya Vani (विद्या वाणी), an empathetic, patient, an
 - Do NOT use markdown symbols, asterisks, emojis, or bullet points in your spoken output."""
 
 
+from livekit.agents import (
+    Agent,
+    AgentServer,
+    AgentSession,
+    JobContext,
+    JobProcess,
+    cli,
+    function_tool,
+    inference,
+    tokenize,
+    room_io,
+    llm,
+)
+
 class Assistant(Agent):
     def __init__(self) -> None:
         super().__init__(instructions=SYSTEM_PROMPT)
 
-    @llm.function_tool(
-        description="Search SQLite database for returning learner history, caller name, and last activity done. Call this IMMEDIATELY when the user tells you their name."
+    @function_tool(
+        description="Lookup a caller's past interactions, topics, and facts by name"
     )
-    def lookup_caller_memory(
-        self,
-        name: Annotated[str, "The name or identity of the caller (e.g. 'Tom', 'Aarav', 'Ramesh')"],
-    ) -> str:
+    async def lookup_caller(self, name: str) -> str:
         logger.info(f"[MEMORY LOOKUP TOOL] Checking memory for caller '{name}'...")
-        res = db.lookup_caller(name)
-        if res:
-            logger.info(f"[MEMORY FOUND] Caller '{name}' has existing record in SQLite DB.")
-            activity = res['facts'].get('activity_done') or res['facts'].get('topics_covered') or 'Vocabulary & Math Practice'
+        record = db.lookup_caller(name)
+        if record:
+            logger.info(f"[MEMORY FOUND] Caller '{name}' has existing record in agent_data.db.")
+            facts_str = json.dumps(record['facts'])
             return (
-                f"RETURNING LEARNER FOUND: Name={res['name']}, "
-                f"Activity Done / Last Topic={activity}, "
-                f"Language preference={res['language_preference']}, "
-                f"Level={res['facts'].get('grade_or_level', 'Beginner')}. "
-                f"CONSENT IS ALREADY GRANTED. Greet them warmly by name '{res['name']}', recall their last activity done '{activity}', and ask if they want to continue from where they left off!"
+                f"Found returning learner! Name: {record['name']}, "
+                f"Facts: {facts_str}, "
+                f"Last Interaction: {record['last_interaction']}. "
+                f"Greet them warmly by name '{record['name']}' and mention their past activity or topics to show you remember them!"
             )
         logger.info(f"[MEMORY NOT FOUND] Caller '{name}' is a new learner.")
-        return f"Caller '{name}' is a new learner with no prior memory record. Ask if you may save their name and progress."
+        return "Caller not found."
 
-    @llm.function_tool(
-        description="Save learner name, activity done / topic practiced, and consent to SQLite database. Call this IMMEDIATELY when the user consents to saving data."
+    @function_tool(
+        description="Lookup a caller's past interactions, topics, and facts by name"
     )
-    def save_caller_memory(
+    async def lookup_caller_memory(self, name: str) -> str:
+        return await self.lookup_caller(name)
+
+    @function_tool(
+        description="Save caller details, learning level, topics covered, and activity done. ALWAYS ask permission from the user before using this!"
+    )
+    async def save_caller_info(
         self,
-        name: Annotated[str, "Name of the caller to save"],
-        activity_done: Annotated[str, "The specific activity or topic practiced in this session (e.g. 'Math Multiplication', 'English Vocabulary Practice')"] = "Vocabulary & Math Practice",
-        consent_given: Annotated[bool, "True if caller agreed to memory storage"] = True,
-        language_preference: Annotated[str, "Language choice"] = "Hinglish",
-        grade_or_level: Annotated[str, "Grade or level"] = "Beginner",
-        frequent_mistakes: Annotated[str, "Mistakes to practice"] = "None",
+        name: str,
+        current_level: str = "Beginner",
+        topics: str = "Vocabulary & Math Practice",
+        mistakes: str = "None",
     ) -> str:
-        logger.info(f"[MEMORY SAVE TOOL] Executing SQLite save for caller '{name}' (Activity='{activity_done}', Consent={consent_given})...")
-        res = db.save_caller_memory(
-            name=name,
-            activity_done=activity_done,
-            topics_covered=activity_done,
-            language_preference=language_preference,
-            grade_or_level=grade_or_level,
-            frequent_mistakes=frequent_mistakes,
-            consent_given=consent_given,
-        )
-        if res["status"] == "saved":
-            logger.info(f"[MEMORY SAVE SUCCESS] Caller '{name}' and Activity '{activity_done}' stored in memory.db")
-            return f"Memory successfully saved to SQLite database for learner {name} with Activity '{activity_done}'. DO NOT ask for consent again!"
-        return "Memory storage declined by caller."
+        logger.info(f"[MEMORY SAVE TOOL] Executing save for caller '{name}' (Topics='{topics}')...")
+        facts = {
+            "current_level": current_level,
+            "activity_done": topics,
+            "topics": topics,
+            "mistakes": mistakes,
+        }
+        db.save_caller(name, facts, language_preference="Hinglish")
+        logger.info(f"[MEMORY SAVE SUCCESS] {name} stored in agent_data.db")
+        return f"Caller info for {name} saved successfully with topics '{topics}'."
+
+    @function_tool(
+        description="Save caller details, learning level, topics covered, and activity done. ALWAYS ask permission from the user before using this!"
+    )
+    async def save_caller_memory(
+        self,
+        name: str,
+        activity_done: str = "Vocabulary & Math Practice",
+        topics_covered: str = "Vocabulary & Math Practice",
+        consent_given: bool = True,
+    ) -> str:
+        return await self.save_caller_info(name=name, topics=activity_done or topics_covered)
+
+    @function_tool(
+        description="Forget all details about a caller if they request it."
+    )
+    async def forget_caller(self, name: str) -> str:
+        logger.info(f"[MEMORY FORGET TOOL] Deleting memory for caller '{name}'...")
+        deleted = db.forget_caller(name)
+        if deleted:
+            return f"All records for {name} have been deleted."
+        return f"No records found for {name}."
 
 
 server = AgentServer()

@@ -1,42 +1,61 @@
-import sqlite3
+import datetime
 import json
+import sqlite3
 import logging
-from datetime import datetime
 from pathlib import Path
 
 logger = logging.getLogger("agent.db")
 
-DB_PATH = Path(__file__).parent.parent / "memory.db"
-
-
-def get_connection():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
+# Use a relative path from the script location so it stays in backend folder
+DB_PATH = Path(__file__).parent.parent / "agent_data.db"
 
 
 def init_db():
-    """Initialize SQLite database table for Day 4 persistent caller memory."""
-    with get_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute(
-            """
-            CREATE TABLE IF NOT EXISTS users (
-                user_id TEXT PRIMARY KEY,
-                name TEXT NOT NULL,
-                language_preference TEXT DEFAULT 'Hinglish',
-                facts TEXT DEFAULT '{}',
-                consent_given INTEGER DEFAULT 0,
-                last_interaction TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-            """
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS users (
+            user_id TEXT PRIMARY KEY,
+            name TEXT,
+            language_preference TEXT,
+            facts TEXT,
+            last_interaction TIMESTAMP
         )
-        conn.commit()
+        """
+    )
+    conn.commit()
+    conn.close()
     logger.info(f"[DB INIT] SQLite Memory Database initialized at {DB_PATH}")
 
 
-def clean_identifier(name_str: str) -> str:
-    s = name_str.strip().lower()
+def save_caller(name: str, facts: dict, language_preference: str = "Hinglish"):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+
+    user_id = name.lower().strip()
+    facts_str = json.dumps(facts)
+    now = datetime.datetime.now().isoformat()
+
+    cursor.execute(
+        """
+        INSERT INTO users (user_id, name, language_preference, facts, last_interaction)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(user_id) DO UPDATE SET
+            name=excluded.name,
+            facts=excluded.facts,
+            language_preference=excluded.language_preference,
+            last_interaction=excluded.last_interaction
+        """,
+        (user_id, name, language_preference, facts_str, now),
+    )
+    conn.commit()
+    conn.close()
+    logger.info(f"[MEMORY SAVED] Saved memory record for caller '{name}' in agent_data.db")
+
+
+def clean_name_query(identifier: str) -> str:
+    s = identifier.strip().lower()
     prefixes = [
         "my name is ", "i am ", "i'm ", "im ", "mera naam ", 
         "name is ", "naam hai ", "this is ", "it's ", "its "
@@ -47,111 +66,64 @@ def clean_identifier(name_str: str) -> str:
     return s
 
 
-def lookup_caller(identifier: str):
-    """
-    Find caller facts by user_id or name in SQLite database.
-    Supports smart phrase cleaning and partial name matching.
-    """
-    if not identifier:
-        return None
-    raw_name = identifier.strip().lower()
-    clean_name = clean_identifier(raw_name)
-    search_pattern = f"%{clean_name}%"
+def lookup_caller(name: str) -> dict | None:
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    clean_name = clean_name_query(name)
+    user_id = clean_name.lower().strip()
+    search_pattern = f"%{user_id}%"
 
-    with get_connection() as conn:
-        cursor = conn.cursor()
-        # 1. Try exact or partial match on cleaned name
-        cursor.execute(
-            """
-            SELECT * FROM users 
-            WHERE LOWER(name) = ? 
-               OR LOWER(user_id) = ?
-               OR LOWER(name) LIKE ?
-               OR ? LIKE '%' || LOWER(name) || '%'
-               OR ? LIKE '%' || LOWER(user_id) || '%'
-            ORDER BY last_interaction DESC
-            LIMIT 1
-            """,
-            (clean_name, clean_name, search_pattern, clean_name, raw_name),
-        )
-        row = cursor.fetchone()
-        
-        # 2. Fallback: match any single word in identifier if multi-word phrase
-        if not row and " " in clean_name:
-            words = [w for w in clean_name.split() if len(w) > 2]
-            for w in words:
-                w_pattern = f"%{w}%"
-                cursor.execute(
-                    "SELECT * FROM users WHERE LOWER(name) LIKE ? OR LOWER(user_id) LIKE ? ORDER BY last_interaction DESC LIMIT 1",
-                    (w_pattern, w_pattern),
-                )
-                row = cursor.fetchone()
-                if row:
-                    break
+    # Match exact user_id or partial phrase
+    cursor.execute(
+        """
+        SELECT name, language_preference, facts, last_interaction FROM users 
+        WHERE user_id = ? 
+           OR LOWER(name) = ?
+           OR LOWER(name) LIKE ?
+           OR ? LIKE '%' || LOWER(name) || '%'
+        ORDER BY last_interaction DESC
+        LIMIT 1
+        """,
+        (user_id, clean_name, search_pattern, clean_name),
+    )
+    row = cursor.fetchone()
+    
+    # Fallback to single word match if multi-word phrase
+    if not row and " " in clean_name:
+        words = [w for w in clean_name.split() if len(w) > 2]
+        for w in words:
+            w_pattern = f"%{w}%"
+            cursor.execute(
+                "SELECT name, language_preference, facts, last_interaction FROM users WHERE user_id LIKE ? OR LOWER(name) LIKE ? ORDER BY last_interaction DESC LIMIT 1",
+                (w_pattern, w_pattern),
+            )
+            row = cursor.fetchone()
+            if row:
+                break
 
-        if row:
-            facts_data = json.loads(row["facts"]) if row["facts"] else {}
-            return {
-                "user_id": row["user_id"],
-                "name": row["name"],
-                "language_preference": row["language_preference"],
-                "facts": facts_data,
-                "consent_given": bool(row["consent_given"]),
-                "last_interaction": row["last_interaction"],
-            }
+    conn.close()
+
+    if row:
+        return {
+            "name": row[0],
+            "language_preference": row[1],
+            "facts": json.loads(row[2]) if row[2] else {},
+            "last_interaction": row[3],
+        }
     return None
 
 
-def save_caller_memory(
-    name: str,
-    language_preference: str = "Hinglish",
-    grade_or_level: str = "Beginner",
-    activity_done: str = "Vocabulary & Math Practice",
-    topics_covered: str = "Vocabulary & Math Practice",
-    frequent_mistakes: str = "None",
-    consent_given: bool = True,
-):
-    """
-    Save or update caller details, name, and activity done in SQLite database if consent is granted.
-    """
-    if not consent_given:
-        logger.info(f"[CONSENT DECLINED] Caller {name} declined memory storage consent. Nothing saved.")
-        return {"status": "declined", "message": "Memory not saved per user request."}
+def forget_caller(name: str) -> bool:
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    clean_name = clean_name_query(name)
+    user_id = clean_name.lower().strip()
 
-    user_id = name.strip().lower().replace(" ", "_")
-    facts_obj = {
-        "grade_or_level": grade_or_level,
-        "activity_done": activity_done or topics_covered,
-        "topics_covered": topics_covered or activity_done,
-        "frequent_mistakes": frequent_mistakes,
-    }
-    facts_json = json.dumps(facts_obj)
-    now_str = datetime.now().isoformat()
-
-    with get_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute(
-            """
-            INSERT INTO users (user_id, name, language_preference, facts, consent_given, last_interaction)
-            VALUES (?, ?, ?, ?, ?, ?)
-            ON CONFLICT(user_id) DO UPDATE SET
-                name=excluded.name,
-                language_preference=excluded.language_preference,
-                facts=excluded.facts,
-                consent_given=excluded.consent_given,
-                last_interaction=excluded.last_interaction
-            """,
-            (user_id, name, language_preference, facts_json, 1 if consent_given else 0, now_str),
-        )
-        conn.commit()
-
-    logger.info(f"[MEMORY SAVED] Saved memory for returning learner '{name}' to SQLite DB.")
-    return {
-        "status": "saved",
-        "user_id": user_id,
-        "name": name,
-        "facts": facts_obj,
-    }
+    cursor.execute("DELETE FROM users WHERE user_id = ? OR LOWER(name) = ?", (user_id, clean_name))
+    deleted = cursor.rowcount > 0
+    conn.commit()
+    conn.close()
+    return deleted
 
 
 # Initialize DB on module import

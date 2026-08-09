@@ -32,7 +32,7 @@ def init_db():
             """
         )
         conn.commit()
-    logger.info(f"💾 SQLite Memory Database initialized at {DB_PATH}")
+    logger.info(f"[DB INIT] SQLite Memory Database initialized at {DB_PATH}")
 
 
 def lookup_caller(identifier: str):
@@ -84,7 +84,7 @@ def save_caller_memory(
     Save or update caller details and learning facts in SQLite database if consent is granted.
     """
     if not consent_given:
-        logger.info(f"🔒 Caller {name} declined memory storage consent. Nothing saved.")
+        logger.info(f"[CONSENT DECLINED] Caller {name} declined memory storage consent. Nothing saved.")
         return {"status": "declined", "message": "Memory not saved per user request."}
 
     user_id = name.strip().lower().replace(" ", "_")
@@ -113,7 +113,7 @@ def save_caller_memory(
         )
         conn.commit()
 
-    logger.info(f"✅ Saved memory for returning learner '{name}' to SQLite DB.")
+    logger.info(f"[MEMORY SAVED] Saved memory for returning learner '{name}' to SQLite DB.")
     return {
         "status": "saved",
         "user_id": user_id,

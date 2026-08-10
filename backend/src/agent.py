@@ -22,9 +22,13 @@ from livekit.plugins.turn_detector.multilingual import MultilingualModel
 import sys
 from pathlib import Path
 
+import sys
+from pathlib import Path
+
 sys.path.append(str(Path(__file__).parent))
 import db as db
 import curriculum as curriculum
+import tools as tools
 
 logger = logging.getLogger("agent")
 
@@ -38,16 +42,24 @@ SYSTEM_PROMPT = """[IDENTITY]
 You are Vidya Vani (विद्या वाणी), an empathetic, patient, and highly interactive Voice AI Tutor built specifically for the Learning & Literacy track as part of the #VoiceForBharat initiative by Murf AI.
 
 [DAY 5 REAL-TIME DOMAIN TOOLS - MANDATORY TOOL USE]
-1. WORD OF THE DAY TOOL:
-   - When asked "what is the word of the day?", "today's word", or when introducing a daily lesson, YOU MUST CALL `fetch_word_of_the_day`.
-   - Always state the date timestamp (e.g. "Today's Word of the Day for August 10, 2026 is...") and give its Hindi translation!
+1. LIVE DICTIONARY LOOKUP MANDATE:
+   - When the user asks for the definition, meaning, or explanation of ANY word (e.g. "What does X mean?", "Define X"), YOU MUST CALL `lookup_word_definition(word=X)`.
+   - Always report the definition returned by the tool.
 
-2. CURRICULUM EXERCISE TOOL (TOOL CHAINING):
-   - When starting or continuing a practice session (Vocabulary, Math, Grammar), YOU MUST CALL `fetch_next_exercise` with the topic and learner level.
-   - Speak the exercise question naturally. Do NOT read JSON keys or code brackets out loud!
+2. LIVE GRAMMAR CHECK MANDATE:
+   - When the user asks to check grammar or verify a sentence (e.g. "Is X correct?", "Check my sentence X"), YOU MUST CALL `check_sentence_grammar(sentence=X)`.
 
-3. ANSWER SCORING TOOL:
-   - When the user answers an exercise, CALL `score_spoken_answer` with their answer and expected concept to evaluate their performance.
+3. WORD OF THE DAY TOOL:
+   - When asked "what is the word of the day?", "today's word", or introducing a lesson, CALL `fetch_word_of_the_day`.
+
+4. CURRICULUM EXERCISE TOOL (TOOL CHAINING):
+   - When practicing Vocabulary, Math, or Grammar, CALL `fetch_next_exercise` with the topic and learner level.
+
+5. ANSWER SCORING TOOL:
+   - When the user answers an exercise, CALL `score_spoken_answer` with their answer and expected concept.
+
+6. GRACEFUL FALLBACK (CRITICAL):
+   - If a tool returns an offline or fallback status, NEVER go silent or read raw JSON errors out loud! Explain the word or rule simply in your own spoken words.
 
 [DAY 4 PERSISTENT MEMORY & CONSENT RULES]
 1. CALLER LOOKUP MANDATE:
@@ -79,15 +91,81 @@ from livekit.agents import (
 )
 
 class Assistant(Agent):
-    def __init__(self) -> None:
+    def __init__(self, room: rtc.Room | None = None) -> None:
         super().__init__(instructions=SYSTEM_PROMPT)
+        self.room = room
+
+    @function_tool(
+        description="Fetch real-time word definition, part of speech, and example sentence from live Free Dictionary API"
+    )
+    async def lookup_word_definition(self, word: str) -> str:
+        logger.info(f"[TOOL CALL] Executing lookup_word_definition for '{word}'...")
+        res = await tools.fetch_word_definition(word)
+        try:
+            payload = json.dumps({
+                "type": "tool_result",
+                "tool": "lookup_word_definition",
+                "word": res.get("word", word),
+                "definition": res.get("definition", ""),
+                "status": res.get("status", "error"),
+                "source": res.get("source", "Free Dictionary API")
+            }).encode("utf-8")
+            if self.room and self.room.local_participant:
+                await self.room.local_participant.publish_data(payload, topic="tool_results")
+                logger.info(f"Published tool_result payload for word: {word}")
+        except Exception as e:
+            logger.warning(f"Could not publish tool_result payload: {e}")
+
+        if res["status"] == "success":
+            def_text = f"Definition of '{res['word']}' ({res['part_of_speech']}): {res['definition']}."
+            if res.get("example"):
+                def_text += f" Example: '{res['example']}'."
+            return def_text
+        elif res["status"] == "not_found":
+            return f"The word '{word}' was not found in the live dictionary database. Provide a simple explanation directly."
+        else:
+            return f"Live dictionary service is currently offline ({res.get('message', 'offline')}). Provide a helpful simple definition directly to the learner."
+
+    @function_tool(
+        description="Check a spoken sentence for real-time grammar rules and error corrections using LanguageTool API"
+    )
+    async def check_sentence_grammar(self, sentence: str) -> str:
+        logger.info(f"[TOOL CALL] Executing check_sentence_grammar for '{sentence}'...")
+        res = await tools.check_grammar_rules(sentence)
+        try:
+            payload = json.dumps({
+                "type": "tool_result",
+                "tool": "check_sentence_grammar",
+                "sentence": res.get("sentence", sentence),
+                "is_correct": res.get("is_correct", False),
+                "error_count": res.get("error_count", 0),
+                "rules": res.get("rules", []),
+                "status": res.get("status", "error"),
+                "source": res.get("source", "LanguageTool Grammar Engine")
+            }).encode("utf-8")
+            if self.room and self.room.local_participant:
+                await self.room.local_participant.publish_data(payload, topic="tool_results")
+                logger.info(f"Published tool_result payload for sentence: {sentence}")
+        except Exception as e:
+            logger.warning(f"Could not publish tool_result payload: {e}")
+
+        if res["status"] == "success":
+            if res["is_correct"]:
+                return f"Grammar check passed cleanly! The sentence '{sentence}' is grammatically correct."
+            rules_summary = "; ".join([
+                f"{r['issue_type']}: {r['message']} (Suggestions: {', '.join(r['replacements'])})"
+                for r in res["rules"]
+            ])
+            return f"Grammar analysis found {res['error_count']} issue: {rules_summary}. Model the correction gently."
+        else:
+            return "Live grammar check API is currently offline. Model any correction directly and encouragingly without stalling."
 
     @function_tool(
         description="Fetch today's official Word of the Day with date timestamp, Hindi translation, definition, and practice prompt"
     )
     async def fetch_word_of_the_day(self) -> str:
         logger.info("[TOOL CALL] Executing fetch_word_of_the_day...")
-        res = curriculum.get_word_of_the_day()
+        res = tools.get_word_of_the_day()
         if res["status"] == "success":
             d = res["data"]
             return (
@@ -253,10 +331,10 @@ async def my_agent(ctx: JobContext):
         "room": ctx.room.name,
         "track": "Learning & Literacy",
         "agent": "Vidya Vani",
-        "day": "Day 4",
+        "day": "Day 5",
     }
 
-    logger.info("Initializing Vidya Vani Voice Tutor (Day 4: Memory & Guardrails) with Murf Falcon TTS (Voice: Pooja)...")
+    logger.info("Initializing Vidya Vani Voice Tutor (Day 5: Real-time Tools & Live APIs) with Murf Falcon TTS (Voice: Pooja)...")
 
     # Set up voice AI pipeline using Murf Falcon TTS with Multilingual Auto-Detect STT
     session = AgentSession(
@@ -264,7 +342,6 @@ async def my_agent(ctx: JobContext):
         llm=google.LLM(
             model="gemini-3.5-flash-lite",
         ),
-        # Murf Falcon TTS — Expressive Indian Voice for Learning & Literacy
         tts=murf.TTS(
             voice="Pooja", 
             locale="en-IN",
@@ -277,26 +354,11 @@ async def my_agent(ctx: JobContext):
         preemptive_generation=True,
     )
 
-    # Latency tracking state
-    speech_end_time = 0.0
-
-    @session.on("user_speech_committed")
-    def on_user_speech_committed(ev):
-        nonlocal speech_end_time
-        speech_end_time = time.time()
-        logger.info(f"[LATENCY TRACKER] User speech committed at t={speech_end_time:.3f}s")
-
-    @session.on("agent_speech_started")
-    def on_agent_speech_started(ev):
-        nonlocal speech_end_time
-        if speech_end_time > 0:
-            latency_ms = (time.time() - speech_end_time) * 1000.0
-            logger.info(f"[LATENCY METRIC] User-speech-end to first audio out: {latency_ms:.1f} ms (Powered by Murf Falcon)")
-            speech_end_time = 0.0
+    assistant = Assistant(room=ctx.room)
 
     # Start session and connect to LiveKit room
     await session.start(
-        agent=Assistant(),
+        agent=assistant,
         room=ctx.room,
         room_options=room_io.RoomOptions(
             audio_input=room_io.AudioInputOptions(
@@ -311,15 +373,29 @@ async def my_agent(ctx: JobContext):
 
     await ctx.connect()
 
+    @ctx.room.on("data_received")
+    def on_data_received(data_packet: rtc.DataPacket):
+        try:
+            payload_str = data_packet.data.decode("utf-8")
+            logger.info(f"[DataChannel] Data received from room: {payload_str}")
+            parsed = json.loads(payload_str)
+            if parsed.get("type") == "toggle_offline_mode":
+                enabled = bool(parsed.get("enabled", False))
+                tools.set_simulate_offline(enabled)
+                logger.info(f"⚡ SIMULATED OFFLINE MODE UPDATED TO: {enabled}")
+        except Exception as err:
+            logger.warning(f"Data packet parse error: {err}")
+
     # Initial greeting prompting for caller name to trigger memory lookup
     await session.say(
-        "Namaste! Welcome to Vidya Vani. What is your name, so I can check your learning progress?",
+        "Namaste! Welcome to Vidya Vani, your spoken English and learning buddy. What is your name, so I can check your learning progress?",
         allow_interruptions=True,
     )
 
 
 if __name__ == "__main__":
     cli.run_app(server)
+
 
 
 

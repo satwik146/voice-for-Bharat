@@ -24,55 +24,40 @@ from pathlib import Path
 
 sys.path.append(str(Path(__file__).parent))
 import db as db
+import curriculum as curriculum
 
 logger = logging.getLogger("agent")
 
 load_dotenv(".env.local")
 
 # =============================================================================
-# Day 4 — Personality, Memory (SQLite) & Guardrails
+# Day 5 — Real-time Domain Tools & Fallback Handling
 # Track 3: Learning & Literacy — Vidya Vani (Voice AI Tutor for Bharat)
 # =============================================================================
 SYSTEM_PROMPT = """[IDENTITY]
 You are Vidya Vani (विद्या वाणी), an empathetic, patient, and highly interactive Voice AI Tutor built specifically for the Learning & Literacy track as part of the #VoiceForBharat initiative by Murf AI.
 
-[DAY 4 PERSISTENT MEMORY & CONSENT RULES - CRITICAL]
-1. CALLER LOOKUP MANDATE (ALWAYS DO THIS FIRST):
-   - Whenever the user mentions their name (e.g., "I'm Tom", "My name is Aarav", "Main Ramesh hun", "Aarav"), YOU MUST FIRST INVOKE THE `lookup_caller_memory` TOOL.
-   - DO NOT reply with text until `lookup_caller_memory` has returned!
-   - IF MATCH FOUND IN DB: Welcome them back by name! Explicitly mention their previous topics (e.g. "Namaste Tom! Welcome back to Vidya Vani. Last time we practiced Vocabulary. Ready to continue?")
-   - IF NO MATCH FOUND IN DB: Welcome them as a new learner and ask once for consent to save their progress.
+[DAY 5 REAL-TIME DOMAIN TOOLS - MANDATORY TOOL USE]
+1. WORD OF THE DAY TOOL:
+   - When asked "what is the word of the day?", "today's word", or when introducing a daily lesson, YOU MUST CALL `fetch_word_of_the_day`.
+   - Always state the date timestamp (e.g. "Today's Word of the Day for August 10, 2026 is...") and give its Hindi translation!
 
-2. CONSENT BEFORE SAVING MANDATE (HARD RULE):
-   - For new learners, ask: "May I save your name and learning progress so I can remember where we left off next time?"
-   - WHEN THE USER SAYS YES (e.g. "Yes", "Sure", "Haan", "Okay"): CALL `save_caller_memory` IMMEDIATELY.
-   - IF THE USER SAYS NO: DO NOT call save_caller_memory.
+2. CURRICULUM EXERCISE TOOL (TOOL CHAINING):
+   - When starting or continuing a practice session (Vocabulary, Math, Grammar), YOU MUST CALL `fetch_next_exercise` with the topic and learner level.
+   - Speak the exercise question naturally. Do NOT read JSON keys or code brackets out loud!
 
-3. AUTOMATIC TOPIC UPDATE MANDATE (HARD RULE):
-   - Whenever the learner chooses, practices, or completes a lesson topic (e.g. Vocabulary, Math, Reading, Storytelling), YOU MUST IMMEDIATELY CALL `save_caller_info` or `save_caller_memory` WITH THAT SPECIFIC PRACTICE TOPIC.
-   - NEVER leave their saved topic as 'Introduction' or 'Consent given'.
+3. ANSWER SCORING TOOL:
+   - When the user answers an exercise, CALL `score_spoken_answer` with their answer and expected concept to evaluate their performance.
+
+[DAY 4 PERSISTENT MEMORY & CONSENT RULES]
+1. CALLER LOOKUP MANDATE:
+   - When user tells you their name, call `lookup_caller_memory`. If found, welcome them back and state their last topic.
+2. CONSENT MANDATE:
+   - Ask permission before saving new caller progress. Call `save_caller_memory` when they say yes.
 
 [STRICT MANDATE: TOPIC SCOPE & REFUSAL RULE]
-- YOU ARE STRICTLY AN EDUCATIONAL TUTOR FOR LEARNING & LITERACY (Vocabulary, Math, Grammar, Reading, Storytelling).
-- IF THE USER ASKS ANY NON-EDUCATIONAL QUESTION OR OTHER SECTOR QUESTION (agriculture, crop prices, medical advice, stocks, news):
-  Refusal Statement: "I am Vidya Vani, your learning and literacy tutor! I can only help you with learning, vocabulary, math, and reading practice. Let us get back to our lesson! What topic would you like to practice today?"
-  DO NOT answer or discuss the off-topic query.
-
-[CALL OBJECTIVES]
-1. First-Turn Greeting & Memory Check: Welcome the learner. If returning caller, greet by name; if new caller, introduce yourself.
-2. Interactive Practice & Code-Mixed Tutoring: Conduct active learning exercises using clear explanations in English, Hindi, or Hinglish.
-3. Positive Reinforcement Loop: Praise correct responses; guide wrong answers with gentle hints.
-
-[LANGUAGE & SUBTITLES]
-- Seamlessly support Indian English, Hindi, and Hinglish.
-- Keep tone warm, cheerful, respectful, and encouraging.
-
-[GUARDRAILS & NEVER-CLAIMS]
-1. HARD REFUSAL: Refuse off-topic or non-educational queries immediately.
-2. NEVER SHAME wrong answers.
-3. NEVER DIAGNOSE learning disabilities or deficits.
-4. NEVER GUARANTEE board exam results.
-5. ESCALATION SCRIPT: For crisis/emergencies, say: "I hear you, and your safety and well-being are very important. As an AI learning tutor, I cannot help with personal emergencies, so please speak with a parent, teacher, or trusted adult right away."
+- YOU ARE STRICTLY AN EDUCATIONAL TUTOR FOR LEARNING & LITERACY (Vocabulary, Math, Grammar, Reading).
+- IF ASKS NON-EDUCATIONAL QUERY: Refuse politely: "I am Vidya Vani, your learning and literacy tutor! I can only help you with learning, vocabulary, math, and reading practice."
 
 [FORMATTING RULES FOR SPEECH]
 - Keep responses concise (2 to 3 sentences maximum per turn) for ultra-low latency speech generation over Murf Falcon TTS.
@@ -98,6 +83,79 @@ class Assistant(Agent):
         super().__init__(instructions=SYSTEM_PROMPT)
 
     @function_tool(
+        description="Fetch today's official Word of the Day with date timestamp, Hindi translation, definition, and practice prompt"
+    )
+    async def fetch_word_of_the_day(self) -> str:
+        logger.info("[TOOL CALL] Executing fetch_word_of_the_day...")
+        res = curriculum.get_word_of_the_day()
+        if res["status"] == "success":
+            d = res["data"]
+            return (
+                f"WORD OF THE DAY FETCHED (Date: {d['date']}):\n"
+                f"Word: {d['word']}\n"
+                f"Hindi Translation: {d['hindi']}\n"
+                f"Definition: {d['definition']}\n"
+                f"Example: {d['example_english']}\n"
+                f"Practice Prompt: {d['practice_prompt']}\n\n"
+                f"INSTRUCTION: Speak the date '{d['date']}', the word '{d['word']}', its Hindi translation '{d['hindi']}', definition, and ask the user the practice prompt!"
+            )
+        else:
+            logger.warning("[TOOL FALLBACK] Word of the Day API unreachable, using graceful fallback.")
+            return (
+                "Word of the Day feature is operating in offline mode. "
+                "Today's featured practice word is 'Courageous' (Sahasi - साहसी), meaning brave and strong-hearted. "
+                "Ask the learner if they can tell you what Courageous means to them!"
+            )
+
+    @function_tool(
+        description="Fetch next tailored exercise question from curriculum by topic (vocabulary, math, grammar) and difficulty level (Beginner, Intermediate)"
+    )
+    async def fetch_next_exercise(self, topic: str = "vocabulary", difficulty: str = "Beginner") -> str:
+        logger.info(f"[TOOL CALL] Executing fetch_next_exercise for topic='{topic}', difficulty='{difficulty}'...")
+        res = curriculum.get_next_exercise(topic, difficulty)
+        ex = res.get("exercise", {})
+        category = res.get("category", "vocabulary")
+        fetched_at = res.get("fetched_at", "Today")
+
+        if category == "math":
+            return (
+                f"MATH EXERCISE FETCHED (Fetched at: {fetched_at}):\n"
+                f"Problem: {ex.get('problem')}\n"
+                f"Expected Answer: {ex.get('answer')}\n"
+                f"Hint: {ex.get('hint')}\n\n"
+                f"INSTRUCTION: Ask the learner the problem naturally. Do not reveal the answer immediately!"
+            )
+        elif category == "grammar":
+            return (
+                f"GRAMMAR EXERCISE FETCHED (Fetched at: {fetched_at}):\n"
+                f"Question: {ex.get('question')}\n"
+                f"Expected Answer: {ex.get('answer')}\n\n"
+                f"INSTRUCTION: Ask the grammar question to the learner clearly!"
+            )
+        else:
+            return (
+                f"VOCABULARY EXERCISE FETCHED (Fetched at: {fetched_at}):\n"
+                f"Word: {ex.get('word')}\n"
+                f"Hindi Meaning: {ex.get('hindi')}\n"
+                f"Definition: {ex.get('definition')}\n"
+                f"Question: {ex.get('question')}\n\n"
+                f"INSTRUCTION: Introduce the word '{ex.get('word')}', explain its Hindi meaning '{ex.get('hindi')}', and ask the question naturally!"
+            )
+
+    @function_tool(
+        description="Evaluate and score a spoken answer given by the learner for a exercise concept"
+    )
+    async def score_spoken_answer(self, user_answer: str, expected_concept: str) -> str:
+        logger.info(f"[TOOL CALL] Executing score_spoken_answer for answer='{user_answer}'...")
+        res = curriculum.evaluate_answer(user_answer, expected_concept)
+        return (
+            f"ANSWER EVALUATED:\n"
+            f"Accuracy Score: {res['score']}%\n"
+            f"Feedback: {res['feedback']}\n\n"
+            f"INSTRUCTION: Praise the effort warmly, share their score of {res['score']}%, and provide encouraging feedback!"
+        )
+
+    @function_tool(
         description="Lookup a caller's past interactions, topics, and facts by name"
     )
     async def lookup_caller(self, name: str) -> str:
@@ -107,17 +165,15 @@ class Assistant(Agent):
             logger.info(f"[MEMORY FOUND] Caller '{name}' has existing record in agent_data.db.")
             facts_dict = record.get('facts', {})
             raw_topics = facts_dict.get('topics') or facts_dict.get('activity_done') or "Vocabulary & Math Practice"
-            if any(k in raw_topics.lower() for k in ["intro", "consent", "greeting"]):
-                topics = "Vocabulary & Math Practice"
-            else:
-                topics = raw_topics
+            topics = "Vocabulary & Math Practice" if any(k in raw_topics.lower() for k in ["intro", "consent", "greeting"]) else raw_topics
+            level = facts_dict.get('current_level', 'Beginner')
             return (
                 f"RETURNING LEARNER RECORD FOUND:\n"
                 f"Name: {record['name']}\n"
                 f"Topics Practiced Previously: {topics}\n"
-                f"Facts JSON: {json.dumps(facts_dict)}\n"
+                f"Level: {level}\n"
                 f"Last Interaction: {record['last_interaction']}\n\n"
-                f"INSTRUCTION: Greet {record['name']} warmly by name and explicitly state that last time you practiced '{topics}', then ask if they would like to continue with '{topics}' or try a new activity!"
+                f"INSTRUCTION: Greet {record['name']} warmly by name and explicitly state that last time you practiced '{topics}', then automatically call `fetch_next_exercise(topic='{topics}', difficulty='{level}')` to continue!"
             )
         logger.info(f"[MEMORY NOT FOUND] Caller '{name}' is a new learner.")
         return "Caller not found."
@@ -138,7 +194,6 @@ class Assistant(Agent):
         topics: str = "Vocabulary & Math Practice",
         mistakes: str = "None",
     ) -> str:
-        # Sanitize topic so initial consent doesn't lock topic to 'Introduction'
         clean_topic = topics
         if not clean_topic or any(k in clean_topic.lower() for k in ["intro", "consent", "greeting"]):
             existing = db.lookup_caller(name)

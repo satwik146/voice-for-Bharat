@@ -3,3 +3,6 @@ electrified_agent.py
 electrified_db.py
 *.db
 *.sqlite
+node_modules/
+*.md
+!README.md

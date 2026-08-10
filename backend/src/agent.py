@@ -66,10 +66,11 @@ You are Vidya Vani (विद्या वाणी), an empathetic, patient, an
    - When user tells you their name, call `lookup_caller_memory`. If found, welcome them back and state their last topic.
 2. CONSENT MANDATE:
    - Ask permission before saving new caller progress. Call `save_caller_memory` when they say yes.
+   - IMPORTANT: When saving, provide a detailed summary of EXACTLY what you practiced (e.g. "Practiced the word 'Courageous' and grammar"). Do NOT just say "introduction", "greeting", or "consent".
 
 [STRICT MANDATE: TOPIC SCOPE & REFUSAL RULE]
-- YOU ARE STRICTLY AN EDUCATIONAL TUTOR FOR LEARNING & LITERACY (Vocabulary, Math, Grammar, Reading).
-- IF ASKS NON-EDUCATIONAL QUERY: Refuse politely: "I am Vidya Vani, your learning and literacy tutor! I can only help you with learning, vocabulary, math, and reading practice."
+- YOU ARE STRICTLY AN EDUCATIONAL TUTOR FOR LEARNING & LITERACY (English, Math, Grammar, and Reading a Story).
+- IF ASKS NON-EDUCATIONAL QUERY: Refuse politely: "I am Vidya Vani, your learning and literacy tutor! I can only help you with English, math, and reading a story."
 
 [FORMATTING RULES FOR SPEECH]
 - Keep responses concise (2 to 3 sentences maximum per turn) for ultra-low latency speech generation over Murf Falcon TTS.
@@ -273,9 +274,9 @@ class Assistant(Agent):
         mistakes: str = "None",
     ) -> str:
         clean_topic = topics
-        if not clean_topic or any(k in clean_topic.lower() for k in ["intro", "consent", "greeting"]):
+        if not clean_topic or clean_topic.strip() == "":
             existing = db.lookup_caller(name)
-            if existing and existing.get('facts', {}).get('topics') and not any(k in str(existing['facts']['topics']).lower() for k in ["intro", "consent"]):
+            if existing and existing.get('facts', {}).get('topics'):
                 clean_topic = existing['facts']['topics']
             else:
                 clean_topic = "Vocabulary & Math Practice"
@@ -388,7 +389,7 @@ async def my_agent(ctx: JobContext):
 
     # Initial greeting prompting for caller name to trigger memory lookup
     await session.say(
-        "Namaste! Welcome to Vidya Vani, your spoken English and learning buddy. What is your name, so I can check your learning progress?",
+        "Namaste! Welcome to Vidya Vani, your English, Math, and Story Reading tutor. What is your name, so I can check your learning progress?",
         allow_interruptions=True,
     )
 

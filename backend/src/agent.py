@@ -68,6 +68,13 @@ You are Vidya Vani (विद्या वाणी), an empathetic, patient, an
    - Ask permission before saving new caller progress. Call `save_caller_memory` when they say yes.
    - IMPORTANT: When saving, provide a detailed summary of EXACTLY what you practiced (e.g. "Practiced the word 'Courageous' and grammar"). Do NOT just say "introduction", "greeting", or "consent".
 
+[DAY 7 ESCALATION MANDATE - HUMAN SUPPORT]
+- TRIGGERS: If the learner is upset, frustrated, struggling significantly, reports a serious technical issue, or explicitly asks for a human teacher, you MUST stop trying to solve it yourself.
+- MANDATORY CONSENT: Before calling `create_escalation`, you MUST explicitly explain what information you will share and ask: "Can I forward a summary of our session to a human teacher to assist you?"
+- If they say yes, call the tool.
+- DATA PRIVACY: Summarize only what happened and what you checked. DO NOT include passwords, OTPs, or private information in the issue summary.
+- NEXT STEPS: Once the tool returns the Ticket ID, you MUST tell the learner their reference ID and assure them: "A human teacher will contact you shortly."
+
 [STRICT MANDATE: TOPIC SCOPE & REFUSAL RULE]
 - YOU ARE STRICTLY AN EDUCATIONAL TUTOR FOR LEARNING & LITERACY (English, Math, Grammar, and Reading a Story).
 - IF ASKS NON-EDUCATIONAL QUERY: Refuse politely: "I am Vidya Vani, your learning and literacy tutor! I can only help you with English, math, and reading a story."
@@ -315,6 +322,30 @@ class Assistant(Agent):
             return f"All records for {name} have been deleted."
         return f"No records found for {name}."
 
+    # DAY 7: HUMAN ESCALATION TOOL
+    @function_tool(
+        description="Escalate a complex issue (frustration, requests for a teacher, technical issues) to a human agent."
+    )
+    async def create_escalation(
+        self,
+        customer_name: Annotated[str, "The learner's first name"],
+        issue_summary: Annotated[
+            str,
+            "A brief summary of what happened, what the agent checked, and what the learner needs",
+        ],
+        urgency: Annotated[str, "The urgency of the issue (e.g., high, medium, low)"],
+        language: Annotated[str, "The caller's spoken language"],
+        preferred_follow_up: Annotated[str, "The preferred follow-up method (e.g., phone call, text)"] = "phone call",
+    ):
+        """Use this tool to escalate an issue to a human agent. YOU MUST ASK FOR CONSENT BEFORE USING THIS."""
+        logger.info(f"[ESCALATION TOOL] Triggered by '{customer_name}'...")
+        ticket_id = db.save_escalation(
+            customer_name=customer_name, 
+            issue_summary=f"Language: {language} | Follow-up: {preferred_follow_up} | Summary: {issue_summary}", 
+            urgency=urgency
+        )
+        return f"Successfully created escalation ticket {ticket_id}. Inform the learner that a human teacher will contact them shortly with this reference ID."
+
 
 server = AgentServer()
 
@@ -387,11 +418,21 @@ async def my_agent(ctx: JobContext):
         except Exception as err:
             logger.warning(f"Data packet parse error: {err}")
 
-    # Initial greeting prompting for caller name to trigger memory lookup
-    await session.say(
-        "Namaste! Welcome to Vidya Vani, your English, Math, and Story Reading tutor. What is your name, so I can check your learning progress?",
-        allow_interruptions=True,
-    )
+    # Detect if this is an outbound call based on the room name
+    is_outbound = ctx.room.name.startswith("outbound")
+
+    if is_outbound:
+        # Day 6 Outbound Call Greeting
+        await session.say(
+            "Namaste! This is Vidya Vani, your English, Math, and Story Reading tutor calling for your daily practice. If you want to stop these calls, just say 'opt out'. Otherwise, what is your name so we can begin?",
+            allow_interruptions=True,
+        )
+    else:
+        # Standard Inbound / Web Greeting
+        await session.say(
+            "Namaste! Welcome to Vidya Vani. What is your name, so I can check your learning progress?",
+            allow_interruptions=True,
+        )
 
 
 if __name__ == "__main__":

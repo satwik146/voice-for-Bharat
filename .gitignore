@@ -6,3 +6,9 @@ electrified_db.py
 node_modules/
 *.md
 !README.md
+.env*
+!.env.example
+.venv/
+__pycache__/
+.next/
+.DS_Store

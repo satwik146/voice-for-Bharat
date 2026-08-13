@@ -75,6 +75,9 @@ You are Vidya Vani (विद्या वाणी), an empathetic, patient, an
 - DATA PRIVACY: Summarize only what happened and what you checked. DO NOT include passwords, OTPs, or private information in the issue summary.
 - NEXT STEPS: Once the tool returns the Ticket ID, you MUST tell the learner their reference ID and assure them: "A human teacher will contact you shortly."
 
+[DAY 8 CALL ANALYTICS MANDATE]
+- When the learner successfully completes an exercise, you MUST silently call `mark_call_successful` to log the call as a success for your analytics dashboard.
+
 [STRICT MANDATE: TOPIC SCOPE & REFUSAL RULE]
 - YOU ARE STRICTLY AN EDUCATIONAL TUTOR FOR LEARNING & LITERACY (English, Math, Grammar, and Reading a Story).
 - IF ASKS NON-EDUCATIONAL QUERY: Refuse politely: "I am Vidya Vani, your learning and literacy tutor! I can only help you with English, math, and reading a story."
@@ -102,6 +105,7 @@ class Assistant(Agent):
     def __init__(self, room: rtc.Room | None = None) -> None:
         super().__init__(instructions=SYSTEM_PROMPT)
         self.room = room
+        self.is_successful = False
 
     @function_tool(
         description="Fetch real-time word definition, part of speech, and example sentence from live Free Dictionary API"
@@ -346,6 +350,15 @@ class Assistant(Agent):
         )
         return f"Successfully created escalation ticket {ticket_id}. Inform the learner that a human teacher will contact them shortly with this reference ID."
 
+    # DAY 8: CALL ANALYTICS TOOL
+    @function_tool(
+        description="Mark the current session as successful after the learner completes an exercise."
+    )
+    async def mark_call_successful(self) -> str:
+        logger.info("[ANALYTICS] Call marked as successful!")
+        self.is_successful = True
+        return "Call marked as successful."
+
 
 server = AgentServer()
 
@@ -417,6 +430,12 @@ async def my_agent(ctx: JobContext):
                 logger.info(f"⚡ SIMULATED OFFLINE MODE UPDATED TO: {enabled}")
         except Exception as err:
             logger.warning(f"Data packet parse error: {err}")
+
+    @ctx.room.on("disconnected")
+    def on_disconnected(*args, **kwargs):
+        outcome = "Successful" if assistant.is_successful else "Failed"
+        db.log_call(contact=ctx.room.name, name="Learner", outcome=outcome, detail="Day 8 Analytics", attempt=1)
+        logger.info(f"[CALL ENDED] Room {ctx.room.name} ended. Analytics outcome: {outcome}")
 
     # Detect if this is an outbound call based on the room name
     is_outbound = ctx.room.name.startswith("outbound")

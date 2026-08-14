@@ -12,3 +12,9 @@ node_modules/
 __pycache__/
 .next/
 .DS_Store
+*.log
+.vscode/
+.idea/
+build/
+dist/
+coverage/

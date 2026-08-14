@@ -1,4 +1,5 @@
 import { Button } from '@/components/ui/button';
+import Link from 'next/link';
 
 function WelcomeImage() {
   return (
@@ -34,7 +35,7 @@ export const WelcomeView = ({
         <WelcomeImage />
 
         <p className="text-foreground max-w-prose pt-1 leading-6 font-medium">
-          Chat live with your voice AI agent
+          Chat live with Vidya Vani Tutor
         </p>
 
         <Button
@@ -44,6 +45,19 @@ export const WelcomeView = ({
         >
           {startButtonText}
         </Button>
+
+        <div className="mt-8 flex flex-col sm:flex-row gap-4 justify-center items-center">
+          <Link href="/analytics">
+            <Button variant="secondary" size="sm" className="font-mono text-xs font-medium tracking-wide w-48">
+              📊 Call Analytics
+            </Button>
+          </Link>
+          <Link href="/tickets">
+            <Button variant="secondary" size="sm" className="font-mono text-xs font-medium tracking-wide w-48">
+              🎟️ Escalation Tickets
+            </Button>
+          </Link>
+        </div>
       </section>
 
 
